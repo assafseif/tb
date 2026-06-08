@@ -1,0 +1,110 @@
+version: '3.9'
+
+services:
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: trading-sqlserver
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${DB_PASSWORD:-TradingBot@123}
+      MSSQL_PID: Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    healthcheck:
+      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -Q "SELECT 1" || exit 1
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - tradingbot-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: trading-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tradingbot-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trading-bot
+    restart: unless-stopped
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      # Database
+      DB_HOST: sqlserver
+      DB_PORT: 1433
+      DB_NAME: ${DB_NAME:-tradingbot}
+      DB_USERNAME: ${DB_USERNAME:-sa}
+      DB_PASSWORD: ${DB_PASSWORD:-TradingBot@123}
+
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+      # AI API - uses host.docker.internal to reach host machine
+      AI_BASE_URL: ${AI_BASE_URL:-http://host.docker.internal:8889}
+
+      # Binance
+      BINANCE_API_KEY: ${BINANCE_API_KEY:-}
+      BINANCE_API_SECRET: ${BINANCE_API_SECRET:-}
+
+      # Trading flags - paper trading enabled by default, real trading disabled
+      TRADING_ENABLED: ${TRADING_ENABLED:-false}
+      PAPER_TRADING_ENABLED: ${PAPER_TRADING_ENABLED:-true}
+
+      # Risk
+      RISK_MAX_PER_TRADE: ${RISK_MAX_PER_TRADE:-0.01}
+      RISK_MAX_DAILY_LOSS: ${RISK_MAX_DAILY_LOSS:-0.03}
+      RISK_MAX_OPEN_TRADES: ${RISK_MAX_OPEN_TRADES:-3}
+      RISK_MIN_CONFIDENCE: ${RISK_MIN_CONFIDENCE:-80}
+
+      # Account
+      ACCOUNT_BALANCE: ${ACCOUNT_BALANCE:-10000.0}
+      ACCOUNT_LEVERAGE: ${ACCOUNT_LEVERAGE:-5}
+
+      # JVM
+      JAVA_OPTS: "-Xms512m -Xmx1g"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: wget -qO- http://localhost:8080/api/health || exit 1
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 90s
+    networks:
+      - tradingbot-network
+
+volumes:
+  sqlserver_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  tradingbot-network:
+    driver: bridge

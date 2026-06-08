@@ -1,0 +1,129 @@
+spring:
+  application:
+    name: ai-news-futures-trading-bot
+
+  datasource:
+    url: jdbc:sqlserver://${DB_HOST:109.205.180.47}:${DB_PORT:1433};databaseName=${DB_NAME:tradingbot};encrypt=false;trustServerCertificate=true
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:TradingBot@123}
+    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 20
+        order_inserts: true
+        order_updates: true
+        format_sql: false
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+
+server:
+  port: 8082
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+# Trading Configuration
+trading:
+  enabled: ${TRADING_ENABLED:false}
+
+paper-trading:
+  enabled: ${PAPER_TRADING_ENABLED:true}
+
+# Binance Configuration
+binance:
+  api-key: ${BINANCE_API_KEY:HMPGDGf477xVHQ1zy1jbb3cnA2nerJwmSin2edR7FGST9t8x2h3dqiH1yMNtMK88}
+  api-secret: ${BINANCE_API_SECRET:XInUSmbcYHNL1aTCH158qiOmmpwTxdNKk0nkYdTDVbbKJ7K5p7P8NYtjKpz1KuDl}
+  testnet-base-url: https://testnet.binancefuture.com
+  live-base-url: https://fapi.binance.com
+  symbols:
+    - BTCUSDT
+    - ETHUSDT
+    - BNBUSDT
+    - SOLUSDT
+  recv-window: 5000
+  kline-limit: 200
+
+# AI Configuration
+ai:
+  base-url: ${AI_BASE_URL:http://localhost:8889}
+  generate-path: /generate
+  timeout-seconds: 30
+  retry-attempts: 3
+
+# News Configuration
+news:
+  # CryptoCompare v1 is free without auth; set api-key to use v2 (larger limit)
+  cryptocompare-url: https://min-api.cryptocompare.com/data/news/
+  cryptocompare-api-key: ${CRYPTOCOMPARE_API_KEY:}
+  categories: BTC,ETH,Altcoin,Trading,Blockchain
+  max-age-hours: 24
+  # RSS feeds require no API key
+  rss-feeds:
+    - https://cointelegraph.com/rss
+    - https://decrypt.co/feed
+    - https://coindesk.com/arc/outboundfeeds/rss/
+
+# Risk Management
+risk:
+  max-risk-per-trade: ${RISK_MAX_PER_TRADE:0.01}
+  max-daily-loss: ${RISK_MAX_DAILY_LOSS:0.03}
+  max-open-trades: ${RISK_MAX_OPEN_TRADES:3}
+  minimum-confidence: ${RISK_MIN_CONFIDENCE:80}
+
+# Scoring Engine
+scoring:
+  weights:
+    sentiment: 0.40
+    trend: 0.25
+    volume: 0.15
+    rsi: 0.20
+  buy-threshold: 80.0
+  sell-threshold: 20.0
+
+# Account balance for risk calculation (USDT)
+account:
+  balance: ${ACCOUNT_BALANCE:10000.0}
+  leverage: ${ACCOUNT_LEVERAGE:5}
+
+logging:
+  level:
+    com.tradingbot: INFO
+    org.springframework.web: WARN
+    org.hibernate: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
