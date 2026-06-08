@@ -142,7 +142,7 @@ public class ScoringEngine {
     private int calculateConfidence(String symbol, IndicatorResult ind, double totalScore) {
         // Higher confidence when score is far from the neutral zone (50)
         double deviation = Math.abs(totalScore - 50.0) / 50.0;
-        int baseConfidence = (int) (deviation * 100);
+        int baseConfidence = (int) Math.round(deviation * 100);
 
         // Boost confidence when multiple indicators agree
         boolean trendBullish = ind.getTrend().contains("UPTREND");
@@ -153,6 +153,10 @@ public class ScoringEngine {
 
         if (totalScore >= 50 && trendBullish && (rsiOversold || highVol)) baseConfidence += 15;
         if (totalScore <= 50 && trendBearish && (rsiOverbought || highVol)) baseConfidence += 15;
+
+        // Boost when score clearly crosses an actionable threshold
+        if (totalScore >= scoringProperties.getBuyThreshold()) baseConfidence += 10;
+        else if (totalScore <= scoringProperties.getSellThreshold()) baseConfidence += 10;
 
         return Math.max(0, Math.min(100, baseConfidence));
     }

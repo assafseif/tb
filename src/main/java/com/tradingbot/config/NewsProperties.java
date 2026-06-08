@@ -9,4 +9,6 @@ import java.util.List;
 @ConfigurationProperties(prefix = "news")
 public class NewsProperties {
     private List<String> rssFeeds;
+    private int maxAgeHours = 4;        // only analyze articles within the scoring lookback window
+    private int maxPerCycle = 10;       // max AI calls per scheduler run (rate/cost control)
 }

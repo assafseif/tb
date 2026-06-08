@@ -47,6 +47,7 @@ spring:
 
 server:
   port: 8082
+  address: 0.0.0.0
 
 management:
   endpoints:
@@ -59,10 +60,10 @@ management:
 
 # Trading Configuration
 trading:
-  enabled: ${TRADING_ENABLED:false}
+  enabled: ${TRADING_ENABLED:true}
 
 paper-trading:
-  enabled: ${PAPER_TRADING_ENABLED:true}
+  enabled: ${PAPER_TRADING_ENABLED:false}
 
 # Binance Configuration
 binance:
@@ -70,6 +71,7 @@ binance:
   api-secret: ${BINANCE_API_SECRET:XInUSmbcYHNL1aTCH158qiOmmpwTxdNKk0nkYdTDVbbKJ7K5p7P8NYtjKpz1KuDl}
   testnet-base-url: https://testnet.binancefuture.com
   live-base-url: https://fapi.binance.com
+  use-testnet: true
   symbols:
     - BTCUSDT
     - ETHUSDT
@@ -91,7 +93,8 @@ news:
   cryptocompare-url: https://min-api.cryptocompare.com/data/news/
   cryptocompare-api-key: ${CRYPTOCOMPARE_API_KEY:}
   categories: BTC,ETH,Altcoin,Trading,Blockchain
-  max-age-hours: 24
+  max-age-hours: 4        # skip articles older than this — they won't affect the scoring engine anyway
+  max-per-cycle: 10       # max AI calls per scheduler run — controls cost in production
   # RSS feeds require no API key
   rss-feeds:
     - https://cointelegraph.com/rss
@@ -102,8 +105,8 @@ news:
 risk:
   max-risk-per-trade: ${RISK_MAX_PER_TRADE:0.01}
   max-daily-loss: ${RISK_MAX_DAILY_LOSS:0.03}
-  max-open-trades: ${RISK_MAX_OPEN_TRADES:3}
-  minimum-confidence: ${RISK_MIN_CONFIDENCE:80}
+  max-open-trades: ${RISK_MAX_OPEN_TRADES:10}
+  minimum-confidence: ${RISK_MIN_CONFIDENCE:55}
 
 # Scoring Engine
 scoring:
@@ -117,8 +120,8 @@ scoring:
 
 # Account balance for risk calculation (USDT)
 account:
-  balance: ${ACCOUNT_BALANCE:10000.0}
-  leverage: ${ACCOUNT_LEVERAGE:5}
+  balance: ${ACCOUNT_BALANCE:100.0}
+  leverage: ${ACCOUNT_LEVERAGE:1}
 
 logging:
   level:

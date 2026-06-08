@@ -53,6 +53,128 @@ public class AiAnalysisService {
                 });
     }
 
+    public Mono<SentimentResult> confirmWithCandles(
+            String symbol, String proposedAction,
+            com.tradingbot.market.MarketSnapshot snapshot,
+            com.tradingbot.indicators.IndicatorResult indicators) {
+
+        String prompt = buildCandlePrompt(symbol, proposedAction, snapshot, indicators);
+        AiRequestDto request = new AiRequestDto(prompt);
+
+        return aiWebClient.post()
+                .uri(aiProperties.getGeneratePath())
+                .bodyValue(request)
+                .retrieve()
+                .bodyToMono(AiResponseDto.class)
+                .map(response -> parseCandleResponse(response, symbol))
+                .retryWhen(Retry.backoff(1, Duration.ofSeconds(1))
+                        .filter(ex -> !(ex instanceof WebClientResponseException.BadRequest))
+                        .onRetryExhaustedThrow((spec, signal) -> signal.failure()))
+                .onErrorResume(ex -> {
+                    log.error("Candle confirmation AI call failed for {} {}: {}",
+                            proposedAction, symbol, ex.getMessage());
+                    // On AI failure, allow trade to proceed (don't block on AI unavailability)
+                    SentimentResult fallback = new SentimentResult();
+                    fallback.setSymbol(symbol);
+                    fallback.setSentimentRaw(proposedAction.equals("BUY") ? "BULLISH" : "BEARISH");
+                    fallback.setConfidence(50);
+                    fallback.setImpact(50);
+                    fallback.setReason("AI unavailable — proceeding with technical signal");
+                    return Mono.just(fallback);
+                });
+    }
+
+    private SentimentResult parseCandleResponse(AiResponseDto response, String symbol) {
+        if (response == null || response.getResponse() == null) {
+            log.warn("Empty AI candle confirmation response for {}", symbol);
+            return SentimentResult.neutral(symbol);
+        }
+        String raw = response.getResponse().trim();
+        try {
+            SentimentResult result = objectMapper.readValue(raw, SentimentResult.class);
+            if (result != null && result.getSentimentRaw() != null) {
+                normalizeConfidence(result);
+                return result;
+            }
+        } catch (Exception ignored) {}
+
+        Matcher matcher = JSON_PATTERN.matcher(raw);
+        if (matcher.find()) {
+            try {
+                SentimentResult result = objectMapper.readValue(matcher.group(), SentimentResult.class);
+                if (result != null && result.getSentimentRaw() != null) {
+                    normalizeConfidence(result);
+                    return result;
+                }
+            } catch (Exception e) {
+                log.warn("Candle confirmation JSON parse failed for {}: {}", symbol, e.getMessage());
+            }
+        }
+        return SentimentResult.neutral(symbol);
+    }
+
+    private String buildCandlePrompt(String symbol, String proposedAction,
+            com.tradingbot.market.MarketSnapshot snapshot,
+            com.tradingbot.indicators.IndicatorResult indicators) {
+
+        List<com.tradingbot.market.CandleData> candles = snapshot.getCandles15m();
+        if (candles == null || candles.isEmpty()) candles = snapshot.getCandles5m();
+        int limit = Math.min(20, candles == null ? 0 : candles.size());
+
+        StringBuilder candleTable = new StringBuilder();
+        if (candles != null && !candles.isEmpty()) {
+            List<com.tradingbot.market.CandleData> recent = candles.subList(
+                    Math.max(0, candles.size() - limit), candles.size());
+            for (com.tradingbot.market.CandleData c : recent) {
+                candleTable.append(String.format("  O:%.2f H:%.2f L:%.2f C:%.2f V:%.1f%n",
+                        c.getOpen(), c.getHigh(), c.getLow(), c.getClose(), c.getVolume()));
+            }
+        }
+
+        return """
+                You are a professional crypto futures trading assistant.
+                The scoring engine has proposed a %s trade. Confirm or reject it based on candle data.
+
+                Symbol: %s
+                Proposed action: %s
+                Current price: %.2f
+
+                Technical indicators:
+                - RSI(14): %.1f %s
+                - EMA(20): %.2f | EMA(50): %.2f
+                - Trend: %s
+                - ATR(14): %.4f
+                - Volume: %s average
+
+                Last %d candles (15m timeframe) — oldest to newest:
+                %s
+                Look for: trend direction, momentum, candle patterns (engulfing, doji, pin bar),
+                volume confirmation, support/resistance levels.
+
+                Should this %s trade be executed given the candle data?
+                Return ONLY valid JSON, no other text:
+                {
+                  "symbol": "%s",
+                  "sentiment": "BULLISH",
+                  "confidence": 75,
+                  "impact": 70,
+                  "reason": "Brief explanation (max 120 chars)"
+                }
+                Use "BULLISH" to confirm a BUY, "BEARISH" to confirm a SELL, "NEUTRAL" to reject.
+                """.formatted(
+                proposedAction, symbol, proposedAction,
+                snapshot.getCurrentPrice().doubleValue(),
+                indicators.getRsi14(),
+                indicators.getRsi14() < 30 ? "(oversold)" : indicators.getRsi14() > 70 ? "(overbought)" : "(neutral)",
+                indicators.getEma20(), indicators.getEma50(),
+                indicators.getTrend(),
+                indicators.getAtr14(),
+                indicators.isHighVolume() ? "ABOVE" : "below",
+                limit, candleTable,
+                proposedAction, symbol
+        );
+    }
+
     private String buildPrompt(NewsEvent newsEvent) {
         List<String> symbols = binanceProperties.getSymbols();
         String symbolList = String.join(", ", symbols);

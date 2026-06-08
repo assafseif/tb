@@ -41,11 +41,8 @@ public class BinanceFuturesApiClient {
         log.info("Placing order: symbol={} side={} qty={}", request.getSymbol(),
                 request.getSide(), request.getQuantity());
 
-        String baseUrl = tradingProperties.isTradingActive()
-                ? binanceProperties.getLiveBaseUrl() : binanceProperties.getTestnetBaseUrl();
-
         return binanceWebClient.post()
-                .uri(baseUrl + "/fapi/v1/order")
+                .uri(binanceProperties.getActiveBaseUrl() + "/fapi/v1/order")
                 .header("X-MBX-APIKEY", binanceProperties.getApiKey())
                 .header(HttpHeaders.CONTENT_TYPE, "application/x-www-form-urlencoded")
                 .body(BodyInserters.fromValue(fullBody))
@@ -61,6 +58,17 @@ public class BinanceFuturesApiClient {
                 });
     }
 
+    public Mono<BinanceOrderResponse> marketClose(String symbol, String side, String quantity) {
+        BinanceOrderRequest req = BinanceOrderRequest.builder()
+                .symbol(symbol)
+                .side(side)
+                .type("MARKET")
+                .quantity(quantity)
+                .reduceOnly("true")
+                .build();
+        return placeOrder(req);
+    }
+
     public Mono<JsonNode> cancelOrder(String symbol, Long orderId) {
         long timestamp = System.currentTimeMillis();
         String queryString = "symbol=" + symbol + "&orderId=" + orderId
@@ -68,11 +76,8 @@ public class BinanceFuturesApiClient {
                 + "&recvWindow=" + binanceProperties.getRecvWindow();
         String signature = BinanceSignatureUtil.sign(queryString, binanceProperties.getApiSecret());
 
-        String baseUrl = tradingProperties.isTradingActive()
-                ? binanceProperties.getLiveBaseUrl() : binanceProperties.getTestnetBaseUrl();
-
         return binanceWebClient.delete()
-                .uri(baseUrl + "/fapi/v1/order?" + queryString + "&signature=" + signature)
+                .uri(binanceProperties.getActiveBaseUrl() + "/fapi/v1/order?" + queryString + "&signature=" + signature)
                 .header("X-MBX-APIKEY", binanceProperties.getApiKey())
                 .retrieve()
                 .bodyToMono(JsonNode.class)
@@ -88,11 +93,8 @@ public class BinanceFuturesApiClient {
                 + "&recvWindow=" + binanceProperties.getRecvWindow();
         String signature = BinanceSignatureUtil.sign(queryString, binanceProperties.getApiSecret());
 
-        String baseUrl2 = tradingProperties.isTradingActive()
-                ? binanceProperties.getLiveBaseUrl() : binanceProperties.getTestnetBaseUrl();
-
         return binanceWebClient.get()
-                .uri(baseUrl2 + "/fapi/v2/account?" + queryString + "&signature=" + signature)
+                .uri(binanceProperties.getActiveBaseUrl() + "/fapi/v2/account?" + queryString + "&signature=" + signature)
                 .header("X-MBX-APIKEY", binanceProperties.getApiKey())
                 .retrieve()
                 .bodyToMono(JsonNode.class)

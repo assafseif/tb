@@ -73,6 +73,10 @@ public class RiskManager {
         // Round to 3 decimal places for futures
         positionSize = Math.floor(positionSize * 1000) / 1000.0;
 
+        // Use minimum lot size that satisfies both step size and min notional
+        double minQty = minimumQuantity(signal.getSymbol(), entryPrice);
+        positionSize = minQty;
+
         if (positionSize <= 0) {
             return RiskCheckResult.rejected("Calculated position size is zero");
         }
@@ -129,5 +133,25 @@ public class RiskManager {
 
     public boolean isDailyLimitBreached() {
         return getDailyLoss() >= accountProperties.getBalance() * riskProperties.getMaxDailyLoss();
+    }
+
+    private double minimumQuantity(String symbol, double entryPrice) {
+        double step = switch (symbol) {
+            case "BTCUSDT" -> 0.001;
+            case "ETHUSDT" -> 0.001;
+            case "BNBUSDT" -> 0.01;
+            case "SOLUSDT" -> 0.01;
+            default        -> 0.01;
+        };
+        double minNotional = switch (symbol) {
+            case "BTCUSDT" -> 50.0;
+            case "ETHUSDT" -> 20.0;
+            case "BNBUSDT" -> 5.0;
+            case "SOLUSDT" -> 5.0;
+            default        -> 10.0;
+        };
+        // Smallest multiple of step that meets the minimum notional
+        double minQtyForNotional = Math.ceil(minNotional / entryPrice / step) * step;
+        return Math.max(step, minQtyForNotional);
     }
 }

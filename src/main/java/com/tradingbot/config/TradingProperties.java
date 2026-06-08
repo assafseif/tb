@@ -13,7 +13,7 @@ public class TradingProperties {
 
     // Runtime-mutable flags (modified via REST API at runtime)
     private final AtomicBoolean tradingEnabledRuntime = new AtomicBoolean(false);
-    private final AtomicBoolean paperTradingEnabledRuntime = new AtomicBoolean(true);
+    private final AtomicBoolean paperTradingEnabledRuntime = new AtomicBoolean(false);
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;

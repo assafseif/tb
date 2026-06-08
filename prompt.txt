@@ -1,0 +1,403 @@
+Build a professional AI-powered crypto futures trading bot dashboard in React + TypeScript + Tailwind CSS.
+
+═══════════════════════════════════════════════════════════════
+AESTHETIC & VIBE
+═══════════════════════════════════════════════════════════════
+
+The design must feel like a Goldman Sachs trading floor in Lower Manhattan — institutional,
+authoritative, and built for people managing serious money. Think Bloomberg Terminal meets
+the NYSE floor at open bell. Not flashy, not gamified — refined, dense, and precise.
+
+Color palette:
+- Background: near-black navy (#080c14) with dark blue-charcoal panels (#0d1421, #111827)
+- Primary accent: crisp institutional green (#00c851) for BUY, profit, positive PnL
+- Danger accent: firm red (#e53935) for SELL, loss, negative PnL — not neon, authoritative
+- Gold accent (#c9a84c) for scores, confidence levels, premium stat labels — muted gold,
+  like the lettering on a Wall Street firm's lobby wall
+- Steel blue (#4a9eff) for prices, timestamps, neutral data
+- Off-white (#e8edf2) for primary text — never pure white, too harsh
+- Muted borders (#1e2d40) — very subtle, like a Bloomberg panel separator
+- Subtle texture: very faint diagonal line pattern on background panels (2px, 3% opacity)
+  to evoke the feel of financial paper or a trading terminal screen
+
+Typography:
+- Primary data font: JetBrains Mono (Google Fonts) — all numbers, prices, IDs
+- Labels and headings: Inter or IBM Plex Sans — clean, professional
+- No decorative fonts anywhere
+
+Feel:
+- Dense information layout — every pixel earns its place
+- Controlled, measured animations — nothing bounces or spins
+- Numbers update with a clean fade or slide, not a showy count-up
+- Status indicators are understated: a small filled square, not a pulsing neon dot
+- Think: the person using this manages $10M positions and needs information instantly,
+  not entertainment
+
+═══════════════════════════════════════════════════════════════
+SOUND ENGINE — NYSE TRADING FLOOR ATMOSPHERE
+═══════════════════════════════════════════════════════════════
+
+Use the Web Audio API (procedural only — no audio files). Include a discreet sound
+toggle in the header. Sounds should feel like a real institutional trading floor:
+controlled, purposeful, never casino-like.
+
+- Ambient: low room tone (filtered white noise at 200–800Hz, gain 0.015) — the hum
+  of a large open floor with dozens of workstations
+- BUY order executed: clean double-click sound (two short 1200Hz ticks, 30ms apart)
+  like a mechanical keyboard confirming an entry
+- SELL order executed: single lower tick (800Hz, 40ms) — slightly heavier than BUY
+- Trade OPEN confirmed: short low-frequency thump (120Hz sine, 60ms) — order book hit
+- TP HIT (profit taken): two ascending tones (C5 then E5, 80ms each, clean sine) —
+  professional, satisfying, not celebratory
+- SL HIT (stop triggered): single flat tone (D3, 120ms, gentle fade) — acknowledgment,
+  not alarm
+- New high-impact news arrives: subtle paper-shuffle click (band-passed noise, 25ms)
+- Score crosses BUY threshold (72+): barely audible low chord swell (200ms fade in,
+  300ms hold, 200ms fade out) — tension building before order fires
+- System status change: clean UI click (600Hz, 20ms)
+
+All sounds play at low gain (0.05–0.15 max). Never startling. A trader 3 feet away
+should barely hear it.
+
+═══════════════════════════════════════════════════════════════
+DATA SOURCE — REST API POLLING
+═══════════════════════════════════════════════════════════════
+
+Backend: http://localhost:8082 (Spring Boot, no WebSocket — use polling).
+Use TanStack Query v5 for all data fetching with these intervals:
+
+- GET /api/dashboard         → every 3 seconds
+- GET /api/trades/open       → every 4 seconds
+- GET /api/signals?page=0&size=20  → every 4 seconds
+- GET /api/trading/status    → every 5 seconds
+- GET /api/news?page=0&size=15     → every 20 seconds
+- GET /api/news/count/unprocessed  → every 20 seconds
+
+Detect changes between polls by comparing IDs or values. Fire sounds on changes.
+Loading states: skeleton loaders styled as dark panel outlines — no spinners.
+Errors: a small "⚠ DATA UNAVAILABLE" label inside the affected panel, red-tinted border.
+
+═══════════════════════════════════════════════════════════════
+API REFERENCE
+═══════════════════════════════════════════════════════════════
+
+GET /api/dashboard
+Returns:
+{
+  systemStatus: {
+    tradingEnabled: boolean,
+    paperTradingMode: boolean,
+    unprocessedNews: number,
+    pendingSignals: number,
+    openTrades: number
+  },
+  tradingStats: {
+    totalTrades: number,
+    openTrades: number,
+    closedTrades: number,
+    totalPnl: number,
+    todayPnl: number,
+    winRate: number        // 0–100
+  },
+  marketSummaries: [{
+    symbol: string,        // "BTCUSDT"
+    currentPrice: number,
+    rsi: number,           // 0–100
+    ema20: number,
+    ema50: number,
+    trend: string,         // "STRONG_UPTREND" | "UPTREND" | "SIDEWAYS" | "DOWNTREND" | "STRONG_DOWNTREND"
+    sentiment: string      // "BULLISH" | "BEARISH" | "NEUTRAL"
+  }],
+  recentSignals: [...],
+  recentTrades: [...]
+}
+
+GET /api/trades?page=0&size=50
+GET /api/trades/open
+Returns array of:
+{
+  id: number,
+  symbol: string,
+  side: "BUY" | "SELL",
+  quantity: number,
+  entryPrice: number,
+  stopLoss: number,
+  takeProfit: number,
+  status: "PENDING" | "OPEN" | "CLOSED" | "FAILED",
+  binanceOrderId: number,
+  paperTrade: boolean,
+  closePrice: number,
+  realizedPnl: number,
+  createdAt: string,
+  updatedAt: string
+}
+
+GET /api/signals?page=0&size=50
+GET /api/signals/pending
+Returns array of:
+{
+  id: number,
+  symbol: string,
+  side: "BUY" | "SELL",
+  score: number,           // 0–100 composite score
+  entryPrice: number,
+  stopLoss: number,
+  takeProfit: number,
+  confidence: number,      // 0–100
+  status: "PENDING" | "EXECUTED" | "REJECTED" | "EXPIRED",
+  sentimentScore: number,
+  trendScore: number,
+  volumeScore: number,
+  rsiScore: number,
+  createdAt: string
+}
+
+GET /api/trading/status
+Returns: { tradingEnabled: boolean, paperTradingMode: boolean, message: string }
+
+POST /api/trading/enable?live=false   → paper trading mode
+POST /api/trading/enable?live=true    → live testnet mode
+POST /api/trading/disable             → halt all trading
+
+GET /api/news?page=0&size=20
+GET /api/news/count/unprocessed
+GET /api/health
+
+═══════════════════════════════════════════════════════════════
+PAGE LAYOUT — SINGLE PAGE, NO ROUTING
+═══════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────┐
+│ HEADER                                                          │
+│  NEURAL TRADER  |  NYSE-style scrolling ticker (BTC ETH BNB SOL)│
+│  [● LIVE TESTNET]  [Last refresh: 2s ago]  [🔊]  [HALT ▐▐]     │
+└─────────────────────────────────────────────────────────────────┘
+
+┌──────────┬──────────┬──────────┬──────────┬──────────┬─────────┐
+│ TOTAL P&L│ TODAY P&L│ WIN RATE │ OPEN POS │ SIGNALS  │ NEWS    │
+│ +$1,247  │  +$83    │  67.3%   │    4     │  PENDING │ QUEUE   │
+│          │          │          │          │    2     │   12    │
+└──────────┴──────────┴──────────┴──────────┴──────────┴─────────┘
+
+┌──────────────────────────────┬──────────────────────────────────┐
+│ MARKET BOARD                 │ AI SCORING ENGINE                │
+│                              │                                  │
+│ BTCUSDT   $63,809.60         │ Last signal: BTCUSDT BUY         │
+│ RSI 63.6  ▓▓▓▓▓▓▓░░░  63%   │                                  │
+│ EMA20 > EMA50  STRONG UPTREND│ Sentiment   ▓▓▓▓▓▓▓▓░░   80     │
+│ AI: BULLISH                  │ Trend       ▓▓▓▓▓▓▓░░░   70     │
+│                              │ Volume      ▓▓▓▓░░░░░░   40     │
+│ ETHUSDT   $1,686.21          │ RSI         ▓▓▓▓░░░░░░   40     │
+│ RSI 61.5  ▓▓▓▓▓▓░░░░  61%   │ ──────────────────────────────   │
+│ EMA20 > EMA50  STRONG UPTREND│ COMPOSITE     75.3 / 100        │
+│ AI: BULLISH                  │ CONFIDENCE    61%               │
+│                              │ THRESHOLD     BUY ≥ 72          │
+│ BNBUSDT   $598.40            │                                  │
+│ RSI 57.8  ▓▓▓▓▓▓░░░░  57%   │ ACTION   [ BUY ]  EXECUTED      │
+│ AI: NEUTRAL                  │                                  │
+│                              │                                  │
+│ SOLUSDT   $66.92             │ Risk per trade:  $100 (1%)       │
+│ RSI 60.8  ▓▓▓▓▓▓░░░░  60%   │ Position size:   0.001 BTC       │
+│ AI: BULLISH                  │ Bot-managed SL/TP                │
+└──────────────────────────────┴──────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│ OPEN POSITIONS                              [● LIVE TESTNET]    │
+│                                                                 │
+│  #  SYMBOL    SIDE  QTY      ENTRY     STOP     TARGET    P&L  │
+│  1  BTCUSDT   BUY   0.001   63,809   62,591    66,245   +$0.15 │
+│     SL ──────[●────────────────────────────]── TP              │
+│     $62,591         $63,809 (now)              $66,245          │
+│     Order #14503902484  •  Opened 17:31:45                      │
+└─────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────┬────────────────────────────────┐
+│ ORDER FLOW  (live)             │ EXECUTION LOG                  │
+│                                │                                │
+│ 17:43:20  BTCUSDT  BUY         │ CLOSED  BTCUSDT  +$3.27  TP   │
+│   Score 75.3  Conf 61%         │ CLOSED  ETHUSDT  -$1.12  SL   │
+│   Entry $63,809  ✓ EXECUTED    │ OPEN    BTCUSDT  +$0.15  →    │
+│                                │                                │
+│ 17:43:19  ETHUSDT  BUY         │ Session win rate:  67%         │
+│   Score 75.3  Conf 61%         │ Avg P&L per trade: +$1.07      │
+│   Entry $1,686   ✗ REJECTED    │ Total closed:      12          │
+│   Reason: confidence below 55  │                                │
+│                                │                                │
+│ 17:42:50  SOLUSDT  BUY         │ ── STREAK ────────────────     │
+│   Score 75.3  Conf 61%         │ ■ ■ □ ■ ■ ■ □ ■ ■ ■          │
+│   Entry $66.92   ✓ EXECUTED    │ (green=win, red=loss, last 10) │
+└────────────────────────────────┴────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│ NEWS INTELLIGENCE                                    Queue: 12  │
+│                                                                 │
+│ ▶ Bitcoin surges past $64K on ETF inflow data                   │
+│   BTCUSDT  BULLISH  conf:92  impact:91  17:31:02               │
+│                                                                 │
+│   Ethereum upgrade boosts L2 activity                           │
+│   ETHUSDT  BULLISH  conf:87  impact:82  17:28:45               │
+│                                                                 │
+│   Federal Reserve holds rates — crypto markets react            │
+│   BTCUSDT  NEUTRAL  conf:40  impact:30  17:15:21               │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│ SYSTEM CONTROLS                                                 │
+│                                                                 │
+│  [ ▐▐ HALT TRADING ]   [ ◈ PAPER MODE ]   [ ● LIVE TESTNET ]  │
+│                                                                 │
+│  Status: ● LIVE — Binance Futures Testnet                       │
+│  Risk: 1% per trade  •  Max daily loss: 3%  •  Leverage: 1×    │
+│  Max open positions: 10  •  Min confidence: 55%                 │
+└─────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════
+COMPONENT DETAILS
+═══════════════════════════════════════════════════════════════
+
+HEADER:
+- Name: "NEURAL TRADER" in Inter SemiBold, steel blue, 18px — no glow, no effects
+- NYSE-style scrolling ticker tape below the header bar: "BTC $63,809 ▲ +1.2%  ETH $1,686 ▲ +0.9%  BNB $598 ▲ +0.4%  SOL $66.9 ▲ +2.1%" — scrolls left continuously, subtle
+- Status badge: small filled square "■ LIVE TESTNET" (green) or "■ PAPER" (amber) or "■ HALTED" (red) — no animation, just color
+- Last refresh counter: "3s" counting down to 0, then resets — small, muted
+- Sound toggle: small speaker icon, gray when off, steel blue when on
+- HALT button: prominent, dark red border, halts trading immediately
+
+STAT CARDS (top row, 6 cards):
+- Label in small uppercase Inter, muted color
+- Value in large JetBrains Mono — green if positive, red if negative, off-white if neutral
+- No icons, no sparklines — numbers only, clean
+- Very subtle bottom border in accent color only when value is non-zero
+- P&L values formatted: +$1,247.83 or -$83.20
+
+MARKET BOARD:
+- 4 rows, one per symbol (BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT)
+- Price in large JetBrains Mono — flashes green/red for 800ms when it changes
+- RSI shown as a segmented horizontal bar (10 segments) with percentage
+- Trend as uppercase text: green for UPTREND variants, red for DOWNTREND, gray SIDEWAYS
+- EMA relationship: "EMA20 > EMA50" or "EMA20 < EMA50" in small text
+- AI sentiment on right: "BULLISH ▲" / "BEARISH ▼" / "NEUTRAL —" with matching color
+- Divider lines between rows, no card borders within the panel
+
+AI SCORING ENGINE:
+- Title: "AI SCORING ENGINE" — last analyzed signal shown
+- 4 horizontal bars: Sentiment, Trend, Volume, RSI — each fills left-to-right based on score
+- Bars are segmented (10 segments), fill color matches value (green >65, amber 45-65, red <45)
+- Score value shown numerically on the right of each bar
+- Composite score shown as a large number (e.g., "75.3") with label "COMPOSITE SCORE"
+- Confidence shown similarly
+- Action badge: [ BUY ] in green bordered box, [ SELL ] in red, [ HOLD ] in gray
+- Threshold reference: "BUY ≥ 72  |  SELL ≤ 35" in small muted text
+
+OPEN POSITIONS:
+- Table with columns: #, Symbol, Side, Qty, Entry, Stop, Target, P&L
+- Below each row: a progress track from SL to TP with a marker at current price
+  - Track background: dark gray
+  - Left portion (SL to entry): red fill
+  - Right portion (entry to TP): green fill
+  - Current price marker: white vertical line
+  - Labels: SL price left, current price center, TP price right
+- P&L updates every 4 seconds, color-coded
+- Binance order ID in very small muted monospace below the main row
+- If paperTrade=true: show "PAPER" badge — dimmed styling, no P&L marker
+- Empty state: "No open positions" centered in the panel
+
+ORDER FLOW (signal feed):
+- Reverse-chronological list, newest at top
+- Each entry: timestamp | symbol | side | score | confidence | status
+- Left border: 3px solid — green=EXECUTED, red=REJECTED, amber=PENDING, gray=EXPIRED
+- Status: ✓ EXECUTED, ✗ REJECTED, ⏳ PENDING, — EXPIRED
+- Smooth slide-in animation (translateY: -20px → 0, 200ms) for new entries
+- Max 30 shown, auto-scroll disabled (user controls scroll)
+
+EXECUTION LOG (trade history):
+- CLOSED trades with outcome: "TP" (green) or "SL" (red) or "MANUAL"
+- Realized P&L shown
+- Win streak: last 10 trades as small colored squares (■ green=win, ■ red=loss)
+- Session stats below: win rate, avg P&L, total closed
+
+NEWS INTELLIGENCE:
+- Latest 15 news items from AI analysis
+- Each: headline | symbol | sentiment badge | conf | impact | time
+- Sentiment: "BULLISH" in green, "BEARISH" in red, "NEUTRAL" in gray
+- ▶ marker on the most recent item
+- "Queue: N" badge showing unprocessed count — turns amber when >10
+- Subtle top-border accent based on dominant sentiment
+
+SYSTEM CONTROLS:
+- Three buttons in a row, clearly labeled, styled like Bloomberg function keys:
+  [ ▐▐ HALT TRADING ] — dark red background when active (halted)
+  [ ◈ PAPER MODE ]     — amber background when active
+  [ ● LIVE TESTNET ]   — green background when active
+- Active button has a filled background; inactive buttons have border only
+- Clicking LIVE TESTNET shows a confirmation modal:
+  "Switch to LIVE testnet mode? Real orders will be placed on Binance Futures Testnet."
+  [ CONFIRM ] [ CANCEL ]
+- Below buttons: current risk parameters displayed as a single row of key:value pairs
+
+═══════════════════════════════════════════════════════════════
+ANIMATIONS — RESTRAINED & PURPOSEFUL
+═══════════════════════════════════════════════════════════════
+
+- Price change: background color flash on the price cell (green or red, 600ms fade) — no movement
+- New signal row: slides down from above (translateY -16px → 0, 180ms ease-out)
+- Number changes: instant update, no count-up — this is a professional tool, not a game
+- Trade executed notification: a slim bar appears below the header for 3 seconds:
+  "▶ ORDER EXECUTED — BTCUSDT BUY 0.001 @ $63,809 | orderId: 14503902484"
+  Dark green background, fades out after 3s
+- TP hit: position row fades out over 1.5s after showing "+$X.XX ✓ TP HIT"
+- SL hit: position row fades out over 1.5s after showing "-$X.XX ✗ SL HIT"
+- Mode switch: status badge cross-fades (200ms)
+- All transitions: ease-out, never bounce, never overshoot
+
+═══════════════════════════════════════════════════════════════
+TECHNICAL REQUIREMENTS
+═══════════════════════════════════════════════════════════════
+
+- React 18 + TypeScript (strict)
+- Tailwind CSS with custom theme (extend with the color palette above)
+- TanStack Query v5 (React Query) for all polling
+- Framer Motion for animations (restrained usage — no spring physics)
+- Recharts for the SL/TP progress track (or a custom div-based implementation)
+- axios for HTTP, base URL from VITE_API_URL env var (default: http://localhost:8082)
+- lucide-react for icons only
+- No authentication
+- Mobile-responsive: single column below 768px, hide some secondary panels
+- Error boundaries per major panel
+
+State: React Query for server state. useState for UI state (sound toggle, active mode button, notification bar). No Redux.
+
+═══════════════════════════════════════════════════════════════
+COPY & VOCABULARY
+═══════════════════════════════════════════════════════════════
+
+App name: "NEURAL TRADER"
+Tagline: "Autonomous Futures Intelligence System"
+Footer: "Binance Futures Testnet  •  AI Engine: Online  •  Risk Controls: Active"
+
+Language throughout must be institutional:
+- "Positions" not "Trades"
+- "Order flow" not "Signals"
+- "Execution" not "Trade placed"
+- "P&L" not "Profit/Loss"
+- "Halt" not "Stop"
+- "Confidence" with % — never "certainty"
+- "Bot-managed stops" — SL/TP are monitored by the system, not exchange orders
+- "Composite score" not "total score"
+- Timestamps in 24h format HH:mm:ss
+- Prices formatted with commas and 2 decimal places: $63,809.60
+- Quantities in full precision: 0.00100000
+
+═══════════════════════════════════════════════════════════════
+FINAL NOTE
+═══════════════════════════════════════════════════════════════
+
+This is the command center for an autonomous AI trading system executing real orders
+on Binance Futures Testnet. The person using it is watching multiple positions, reading
+AI-generated signals, and making decisions under pressure.
+
+The interface must convey control, precision, and trust. Every number is real. Every
+signal matters. The design earns authority through density and clarity — not decoration.
+
+Build it like Goldman Sachs commissioned it. Not a startup demo. Not a student project.
+A professional-grade trading terminal.

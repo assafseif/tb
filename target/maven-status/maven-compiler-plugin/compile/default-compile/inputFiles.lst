@@ -6,6 +6,7 @@
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/util/RedisAvailabilityTracker.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/controller/NewsController.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/config/AppConfig.java
+/var/www/html/claude/trading-bot/src/main/java/com/tradingbot/scheduler/PaperTradeMonitorScheduler.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/entity/ExecutedTrade.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/controller/SignalController.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/entity/enums/SignalStatus.java
@@ -24,6 +25,7 @@
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/TradingBotApplication.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/market/MarketDataService.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/market/CandleData.java
+/var/www/html/claude/trading-bot/src/main/java/com/tradingbot/scheduler/LiveTradeMonitorScheduler.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/entity/enums/TradeStatus.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/risk/RiskManager.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/config/ScoringProperties.java
@@ -73,6 +75,7 @@
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/indicators/ManualIndicatorCalculator.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/repository/NewsEventRepository.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/config/WebClientConfig.java
+/var/www/html/claude/trading-bot/src/main/java/com/tradingbot/config/CorsConfig.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/mapper/NewsMapper.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/controller/GlobalExceptionHandler.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/market/BinanceFuturesClient.java

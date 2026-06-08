@@ -1,5 +1,7 @@
 package com.tradingbot.trading;
 
+import com.tradingbot.ai.AiAnalysisService;
+import com.tradingbot.ai.SentimentResult;
 import com.tradingbot.config.ScoringProperties;
 import com.tradingbot.entity.TradeSignal;
 import com.tradingbot.entity.enums.SignalStatus;
@@ -29,6 +31,7 @@ public class SignalGenerator {
     private final ScoringEngine scoringEngine;
     private final ScoringProperties scoringProperties;
     private final TradeSignalRepository signalRepository;
+    private final AiAnalysisService aiAnalysisService;
 
     public Flux<TradeSignal> generateSignals() {
         return marketDataService.getAllSnapshots()
@@ -46,20 +49,50 @@ public class SignalGenerator {
                 log.debug("{}: HOLD (score={})", snapshot.getSymbol(), String.format("%.1f", score.getTotalScore()));
                 return null;
             }
-
-            TradeSignal signal = buildSignal(snapshot, indicators, score);
-            TradeSignal saved = signalRepository.save(signal);
-            log.info("Generated {} signal for {} (score={}, confidence={})",
-                    score.getAction(), snapshot.getSymbol(),
-                    String.format("%.1f", score.getTotalScore()), score.getConfidence());
-            return saved;
+            return new Object[]{indicators, score};
         })
         .subscribeOn(Schedulers.boundedElastic())
+        .flatMap(arr -> {
+            if (arr == null) return Mono.empty();
+            IndicatorResult indicators = (IndicatorResult) arr[0];
+            TradeScore score = (TradeScore) arr[1];
+
+            // Ask AI to confirm with candle data before committing the signal
+            return aiAnalysisService.confirmWithCandles(
+                            snapshot.getSymbol(), score.getAction(), snapshot, indicators)
+                    .flatMap(confirmation -> Mono.fromCallable(() -> {
+                        boolean confirmed = isConfirmed(score.getAction(), confirmation);
+                        log.info("Candle AI confirmation for {} {}: sentiment={} confidence={} reason={} → {}",
+                                score.getAction(), snapshot.getSymbol(),
+                                confirmation.getSentimentRaw(), confirmation.getConfidence(),
+                                confirmation.getReason(),
+                                confirmed ? "APPROVED" : "REJECTED");
+
+                        if (!confirmed) return null;
+
+                        TradeSignal signal = buildSignal(snapshot, indicators, score);
+                        TradeSignal saved = signalRepository.save(signal);
+                        log.info("Generated {} signal for {} (score={}, confidence={})",
+                                score.getAction(), snapshot.getSymbol(),
+                                String.format("%.1f", score.getTotalScore()), score.getConfidence());
+                        return saved;
+                    }).subscribeOn(Schedulers.boundedElastic()));
+        })
         .onErrorResume(ex -> {
             log.error("Signal generation error for {}: {}", snapshot.getSymbol(), ex.getMessage());
             return Mono.empty();
         })
         .filter(signal -> signal != null);
+    }
+
+    private boolean isConfirmed(String action, SentimentResult confirmation) {
+        String sentiment = confirmation.getSentimentRaw();
+        if (sentiment == null) return false;
+        return switch (action) {
+            case "BUY"  -> "BULLISH".equalsIgnoreCase(sentiment);
+            case "SELL" -> "BEARISH".equalsIgnoreCase(sentiment);
+            default     -> false;
+        };
     }
 
     private TradeSignal buildSignal(MarketSnapshot snapshot, IndicatorResult indicators, TradeScore score) {

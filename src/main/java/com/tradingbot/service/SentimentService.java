@@ -2,6 +2,7 @@ package com.tradingbot.service;
 
 import com.tradingbot.ai.AiAnalysisService;
 import com.tradingbot.ai.SentimentResult;
+import com.tradingbot.config.NewsProperties;
 import com.tradingbot.entity.NewsEvent;
 import com.tradingbot.entity.SentimentAnalysis;
 import com.tradingbot.repository.NewsEventRepository;
@@ -13,6 +14,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Slf4j
@@ -23,17 +25,27 @@ public class SentimentService {
     private final AiAnalysisService aiAnalysisService;
     private final NewsEventRepository newsEventRepository;
     private final SentimentAnalysisRepository sentimentRepository;
+    private final NewsProperties newsProperties;
 
     public Mono<Integer> analyzeUnprocessedNews() {
+        LocalDateTime cutoff = LocalDateTime.now().minusHours(newsProperties.getMaxAgeHours());
+
         return Mono.fromCallable(() ->
-                newsEventRepository.findByProcessedFalseOrderByPublishedAtDesc())
+                newsEventRepository.findByProcessedFalseOrderByPublishedAtDesc()
+                        .stream()
+                        .filter(n -> n.getPublishedAt() == null || n.getPublishedAt().isAfter(cutoff))
+                        .filter(n -> !sentimentRepository.existsByNewsId(n.getId()))
+                        .limit(newsProperties.getMaxPerCycle())
+                        .toList())
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMapMany(Flux::fromIterable)
-                .filter(news -> !sentimentRepository.existsByNewsId(news.getId()))
-                .flatMap(this::analyzeNewsItem, 3) // max 3 concurrent AI calls
+                .flatMap(this::analyzeNewsItem, 3)
                 .count()
                 .map(Long::intValue)
-                .doOnSuccess(count -> log.info("Analyzed {} news items", count));
+                .doOnSuccess(count -> {
+                    if (count > 0) log.info("Analyzed {} news items (max {}/cycle, cutoff: last {}h)",
+                            count, newsProperties.getMaxPerCycle(), newsProperties.getMaxAgeHours());
+                });
     }
 
     private Mono<SentimentAnalysis> analyzeNewsItem(NewsEvent news) {

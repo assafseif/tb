@@ -7,7 +7,6 @@ import com.tradingbot.config.TradingProperties;
 import com.tradingbot.entity.ExecutedTrade;
 import com.tradingbot.entity.TradeSignal;
 import com.tradingbot.entity.enums.SignalStatus;
-import com.tradingbot.entity.enums.TradeSide;
 import com.tradingbot.entity.enums.TradeStatus;
 import com.tradingbot.repository.ExecutedTradeRepository;
 import com.tradingbot.repository.TradeSignalRepository;
@@ -46,10 +45,15 @@ public class TradingEngine {
 
     private Mono<ExecutedTrade> processSignal(TradeSignal signal) {
         return Mono.fromCallable(() -> {
-            // Risk evaluation
+            log.info("[ORDER ATTEMPT] signal={} {} {} | score={} confidence={} | entry={} sl={} tp={}",
+                    signal.getId(), signal.getSymbol(), signal.getSide(),
+                    String.format("%.1f", signal.getScore()), signal.getConfidence(),
+                    signal.getEntryPrice(), signal.getStopLoss(), signal.getTakeProfit());
+
             RiskCheckResult riskResult = riskManager.evaluate(signal);
             if (!riskResult.isApproved()) {
-                log.warn("Signal {} rejected by risk manager: {}", signal.getId(), riskResult.getReason());
+                log.warn("[ORDER SKIPPED] signal={} {} {} → RISK REJECTED: {}",
+                        signal.getId(), signal.getSymbol(), signal.getSide(), riskResult.getReason());
                 signalRepository.updateStatus(signal.getId(), SignalStatus.REJECTED, LocalDateTime.now());
                 return null;
             }
@@ -57,10 +61,17 @@ public class TradingEngine {
             boolean isPaper = !tradingProperties.isTradingActive()
                     || tradingProperties.isPaperTradingActive();
 
+            if (!tradingProperties.isTradingActive()) {
+                log.warn("[ORDER SKIPPED] signal={} {} {} → trading is DISABLED",
+                        signal.getId(), signal.getSymbol(), signal.getSide());
+                signalRepository.updateStatus(signal.getId(), SignalStatus.REJECTED, LocalDateTime.now());
+                return null;
+            }
+
             ExecutedTrade trade = buildTrade(signal, riskResult, isPaper);
             ExecutedTrade saved = tradeRepository.save(trade);
 
-            log.info("[{}] Executing {} {} {} qty={} entry={} sl={} tp={}",
+            log.info("[{}] Executing {} {} signal={} qty={} entry={} sl={} tp={}",
                     isPaper ? "PAPER" : "LIVE",
                     signal.getSymbol(), signal.getSide(),
                     signal.getId(), riskResult.getPositionSize(),
@@ -75,7 +86,6 @@ public class TradingEngine {
             if (!trade.isPaperTrade()) {
                 return executeLiveTrade(trade, signal);
             }
-            // Paper trade: mark signal executed, trade as OPEN
             return Mono.fromCallable(() -> {
                 signalRepository.updateStatus(signal.getId(), SignalStatus.EXECUTED, LocalDateTime.now());
                 trade.setStatus(TradeStatus.OPEN);
@@ -83,7 +93,8 @@ public class TradingEngine {
             }).subscribeOn(Schedulers.boundedElastic());
         })
         .onErrorResume(ex -> {
-            log.error("Trade processing error for signal {}: {}", signal.getId(), ex.getMessage());
+            log.error("[ORDER SKIPPED] signal={} {} {} → EXCEPTION: {}",
+                    signal.getId(), signal.getSymbol(), signal.getSide(), ex.getMessage());
             return Mono.fromCallable(() -> {
                 signalRepository.updateStatus(signal.getId(), SignalStatus.REJECTED, LocalDateTime.now());
                 return null;
@@ -92,19 +103,20 @@ public class TradingEngine {
     }
 
     private Mono<ExecutedTrade> executeLiveTrade(ExecutedTrade trade, TradeSignal signal) {
-        BinanceOrderRequest request = BinanceOrderRequest.builder()
+        BinanceOrderRequest entryRequest = BinanceOrderRequest.builder()
                 .symbol(trade.getSymbol())
                 .side(trade.getSide().name())
                 .type("MARKET")
                 .quantity(trade.getQuantity().toPlainString())
                 .build();
 
-        return binanceApiClient.placeOrder(request)
+        return binanceApiClient.placeOrder(entryRequest)
                 .flatMap(response -> Mono.fromCallable(() -> {
                     trade.setBinanceOrderId(response.getOrderId());
                     trade.setStatus(TradeStatus.OPEN);
                     signalRepository.updateStatus(signal.getId(), SignalStatus.EXECUTED, LocalDateTime.now());
-                    log.info("Live order placed: orderId={} for {}", response.getOrderId(), trade.getSymbol());
+                    log.info("Live order placed: orderId={} for {} | SL={} TP={} (bot-managed)",
+                            response.getOrderId(), trade.getSymbol(), trade.getStopLoss(), trade.getTakeProfit());
                     return tradeRepository.save(trade);
                 }).subscribeOn(Schedulers.boundedElastic()))
                 .onErrorResume(ex -> {

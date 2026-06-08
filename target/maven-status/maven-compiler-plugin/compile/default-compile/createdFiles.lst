@@ -8,6 +8,7 @@ com/tradingbot/controller/DashboardController.class
 com/tradingbot/dto/AiRequestDto.class
 com/tradingbot/controller/HealthController.class
 com/tradingbot/dto/DashboardDto.class
+com/tradingbot/scheduler/LiveTradeMonitorScheduler.class
 com/tradingbot/util/JsonUtil.class
 com/tradingbot/risk/RiskCheckResult.class
 com/tradingbot/config/AppConfig.class
@@ -92,6 +93,8 @@ com/tradingbot/util/MathUtil.class
 com/tradingbot/config/NewsProperties.class
 com/tradingbot/dto/DashboardDto$SystemStatus$SystemStatusBuilder.class
 com/tradingbot/dto/DashboardDto$TradingStats.class
+com/tradingbot/config/CorsConfig.class
+com/tradingbot/scheduler/PaperTradeMonitorScheduler.class
 com/tradingbot/binance/BinanceOrderRequest$BinanceOrderRequestBuilder.class
 com/tradingbot/repository/NewsEventRepository.class
 com/tradingbot/config/PaperTradingProperties.class

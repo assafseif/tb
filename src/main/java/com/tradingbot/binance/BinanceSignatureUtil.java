@@ -39,8 +39,14 @@ public final class BinanceSignatureUtil {
         if (req.getTimeInForce() != null && !req.getTimeInForce().isBlank()) {
             append(sb, "timeInForce", req.getTimeInForce());
         }
+        if (req.getStopPrice() != null && !req.getStopPrice().isBlank()) {
+            append(sb, "stopPrice", req.getStopPrice());
+        }
         if (req.getReduceOnly() != null && !req.getReduceOnly().isBlank()) {
             append(sb, "reduceOnly", req.getReduceOnly());
+        }
+        if (req.getClosePosition() != null && !req.getClosePosition().isBlank()) {
+            append(sb, "closePosition", req.getClosePosition());
         }
 
         append(sb, "timestamp", String.valueOf(timestamp));
