@@ -1,0 +1,90 @@
+====================================================================
+  BINANCE FUTURES TESTNET — MANUAL ORDER TEST (BUY + SL + TP)
+  Symbol  : BTCUSDT
+  Network : TESTNET  https://testnet.binancefuture.com
+  NOTE    : SL/TP use /fapi/v1/algoOrder (not /fapi/v1/order)
+====================================================================
+
+API_KEY    = HMPGDGf477xVHQ1zy1jbb3cnA2nerJwmSin2edR7FGST9t8x2h3dqiH1yMNtMK88
+API_SECRET = XInUSmbcYHNL1aTCH158qiOmmpwTxdNKk0nkYdTDVbbKJ7K5p7P8NYtjKpz1KuDl
+
+Run steps 1, 2, 3 in order. Each generates its own fresh timestamp.
+
+--------------------------------------------------------------------
+STEP 1 — ENTRY ORDER  (BUY MARKET 0.001 BTC)
+Endpoint: /fapi/v1/order
+--------------------------------------------------------------------
+
+TS=$(date +%s000) && \
+QS="symbol=BTCUSDT&side=BUY&type=MARKET&quantity=0.001&timestamp=${TS}&recvWindow=5000" && \
+SIG=$(echo -n "$QS" | openssl dgst -sha256 -hmac "XInUSmbcYHNL1aTCH158qiOmmpwTxdNKk0nkYdTDVbbKJ7K5p7P8NYtjKpz1KuDl" | awk '{print $2}') && \
+curl -s -X POST "https://testnet.binancefuture.com/fapi/v1/order" \
+  -H "X-MBX-APIKEY: HMPGDGf477xVHQ1zy1jbb3cnA2nerJwmSin2edR7FGST9t8x2h3dqiH1yMNtMK88" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data "${QS}&signature=${SIG}" | python3 -m json.tool
+
+
+--------------------------------------------------------------------
+STEP 2 — STOP LOSS  (STOP_MARKET trigger at 61500)
+Endpoint: /fapi/v1/algoOrder   algoType=CONDITIONAL
+--------------------------------------------------------------------
+
+TS=$(date +%s000) && \
+QS="symbol=BTCUSDT&side=SELL&algoType=CONDITIONAL&type=STOP_MARKET&triggerPrice=61500&closePosition=true&timestamp=${TS}&recvWindow=5000" && \
+SIG=$(echo -n "$QS" | openssl dgst -sha256 -hmac "XInUSmbcYHNL1aTCH158qiOmmpwTxdNKk0nkYdTDVbbKJ7K5p7P8NYtjKpz1KuDl" | awk '{print $2}') && \
+curl -s -X POST "https://testnet.binancefuture.com/fapi/v1/algoOrder" \
+  -H "X-MBX-APIKEY: HMPGDGf477xVHQ1zy1jbb3cnA2nerJwmSin2edR7FGST9t8x2h3dqiH1yMNtMK88" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data "${QS}&signature=${SIG}" | python3 -m json.tool
+
+
+--------------------------------------------------------------------
+STEP 3 — TAKE PROFIT  (TAKE_PROFIT_MARKET trigger at 65200)
+Endpoint: /fapi/v1/algoOrder   algoType=CONDITIONAL
+--------------------------------------------------------------------
+
+TS=$(date +%s000) && \
+QS="symbol=BTCUSDT&side=SELL&algoType=CONDITIONAL&type=TAKE_PROFIT_MARKET&triggerPrice=65200&closePosition=true&timestamp=${TS}&recvWindow=5000" && \
+SIG=$(echo -n "$QS" | openssl dgst -sha256 -hmac "XInUSmbcYHNL1aTCH158qiOmmpwTxdNKk0nkYdTDVbbKJ7K5p7P8NYtjKpz1KuDl" | awk '{print $2}') && \
+curl -s -X POST "https://testnet.binancefuture.com/fapi/v1/algoOrder" \
+  -H "X-MBX-APIKEY: HMPGDGf477xVHQ1zy1jbb3cnA2nerJwmSin2edR7FGST9t8x2h3dqiH1yMNtMK88" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data "${QS}&signature=${SIG}" | python3 -m json.tool
+
+
+--------------------------------------------------------------------
+CHECK — List open algo orders (SL/TP)
+--------------------------------------------------------------------
+
+TS=$(date +%s000) && \
+QS="timestamp=${TS}&recvWindow=5000" && \
+SIG=$(echo -n "$QS" | openssl dgst -sha256 -hmac "XInUSmbcYHNL1aTCH158qiOmmpwTxdNKk0nkYdTDVbbKJ7K5p7P8NYtjKpz1KuDl" | awk '{print $2}') && \
+curl -s "https://testnet.binancefuture.com/fapi/v1/openAlgoOrders?${QS}&signature=${SIG}" \
+  -H "X-MBX-APIKEY: HMPGDGf477xVHQ1zy1jbb3cnA2nerJwmSin2edR7FGST9t8x2h3dqiH1yMNtMK88" | python3 -m json.tool
+
+
+--------------------------------------------------------------------
+CANCEL — Cancel a specific algo order by algoId
+--------------------------------------------------------------------
+
+TS=$(date +%s000) && \
+QS="algoId=<ALGO_ID_HERE>&timestamp=${TS}&recvWindow=5000" && \
+SIG=$(echo -n "$QS" | openssl dgst -sha256 -hmac "XInUSmbcYHNL1aTCH158qiOmmpwTxdNKk0nkYdTDVbbKJ7K5p7P8NYtjKpz1KuDl" | awk '{print $2}') && \
+curl -s -X DELETE "https://testnet.binancefuture.com/fapi/v1/algoOrder" \
+  -H "X-MBX-APIKEY: HMPGDGf477xVHQ1zy1jbb3cnA2nerJwmSin2edR7FGST9t8x2h3dqiH1yMNtMK88" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data "${QS}&signature=${SIG}" | python3 -m json.tool
+
+
+====================================================================
+  NOTES
+====================================================================
+- MARKET and LIMIT orders  →  /fapi/v1/order  (standard endpoint)
+- STOP_MARKET / TAKE_PROFIT_MARKET  →  /fapi/v1/algoOrder  (algo endpoint)
+  - algoType=CONDITIONAL  (required)
+  - triggerPrice=<price>  (not stopPrice)
+  - closePosition=true    (closes full position, no qty needed)
+- For a SELL position: flip side=BUY on all 3 steps
+- triggerPrice on SL must be BELOW current price for a BUY position
+- triggerPrice on TP must be ABOVE current price for a BUY position
+====================================================================

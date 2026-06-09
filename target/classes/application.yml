@@ -16,7 +16,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: create-drop
     show-sql: false
     open-in-view: false
     properties:
@@ -99,14 +99,20 @@ news:
   rss-feeds:
     - https://cointelegraph.com/rss
     - https://decrypt.co/feed
-    - https://coindesk.com/arc/outboundfeeds/rss/
+    - https://bitcoinmagazine.com/feed
+    - https://cryptopotato.com/feed/
 
 # Risk Management
 risk:
+  # max-risk-per-trade: ${RISK_MAX_PER_TRADE:0.05}    # 10% per trade (testing)
+  # max-daily-loss: ${RISK_MAX_DAILY_LOSS:0.80}        # 80% daily loss cap (testing)
+  # max-open-trades: ${RISK_MAX_OPEN_TRADES:20}
+  # minimum-confidence: ${RISK_MIN_CONFIDENCE:5}       # accept almost any signal (testing)
+
   max-risk-per-trade: ${RISK_MAX_PER_TRADE:0.01}
   max-daily-loss: ${RISK_MAX_DAILY_LOSS:0.03}
   max-open-trades: ${RISK_MAX_OPEN_TRADES:10}
-  minimum-confidence: ${RISK_MIN_CONFIDENCE:55}
+  minimum-confidence: ${RISK_MIN_CONFIDENCE:5}
 
 # Scoring Engine
 scoring:
@@ -115,13 +121,11 @@ scoring:
     trend: 0.25
     volume: 0.15
     rsi: 0.20
-  buy-threshold: 72.0
-  sell-threshold: 35.0
+  buy-threshold: 55.0    # lowered for testing — any mild uptrend triggers
+  sell-threshold: 45.0   # lowered for testing — any mild downtrend triggers
 
-# Account balance for risk calculation (USDT)
 account:
-  balance: ${ACCOUNT_BALANCE:100.0}
-  leverage: ${ACCOUNT_LEVERAGE:1}
+  leverage: 1
 
 logging:
   level:

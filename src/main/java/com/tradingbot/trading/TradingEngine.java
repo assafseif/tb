@@ -110,15 +110,32 @@ public class TradingEngine {
                 .quantity(trade.getQuantity().toPlainString())
                 .build();
 
+        String closeSide = trade.getSide() == com.tradingbot.entity.enums.TradeSide.BUY ? "SELL" : "BUY";
+
         return binanceApiClient.placeOrder(entryRequest)
                 .flatMap(response -> Mono.fromCallable(() -> {
                     trade.setBinanceOrderId(response.getOrderId());
                     trade.setStatus(TradeStatus.OPEN);
                     signalRepository.updateStatus(signal.getId(), SignalStatus.EXECUTED, LocalDateTime.now());
-                    log.info("Live order placed: orderId={} for {} | SL={} TP={} (bot-managed)",
-                            response.getOrderId(), trade.getSymbol(), trade.getStopLoss(), trade.getTakeProfit());
                     return tradeRepository.save(trade);
                 }).subscribeOn(Schedulers.boundedElastic()))
+                // Wait for Binance to establish the position before placing SL/TP algo orders
+                // (algo orders with GTE_GTC reject immediately if no open position exists yet)
+                .delayElement(java.time.Duration.ofMillis(1500))
+                .flatMap(saved -> binanceApiClient.placeStopLoss(saved.getSymbol(), closeSide, saved.getStopLoss())
+                        .doOnSuccess(r -> log.info("SL order placed: orderId={} symbol={} stopPrice={}", r.getOrderId(), saved.getSymbol(), saved.getStopLoss()))
+                        .onErrorResume(ex -> {
+                            log.error("Failed to place SL order for trade {}: {}", saved.getId(), ex.getMessage());
+                            return Mono.empty();
+                        })
+                        .thenReturn(saved))
+                .flatMap(saved -> binanceApiClient.placeTakeProfit(saved.getSymbol(), closeSide, saved.getTakeProfit())
+                        .doOnSuccess(r -> log.info("TP order placed: orderId={} symbol={} takeProfitPrice={}", r.getOrderId(), saved.getSymbol(), saved.getTakeProfit()))
+                        .onErrorResume(ex -> {
+                            log.error("Failed to place TP order for trade {}: {}", saved.getId(), ex.getMessage());
+                            return Mono.empty();
+                        })
+                        .thenReturn(saved))
                 .onErrorResume(ex -> {
                     log.error("Binance order placement failed: {}", ex.getMessage());
                     return Mono.fromCallable(() -> {

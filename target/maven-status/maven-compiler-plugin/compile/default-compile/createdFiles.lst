@@ -8,7 +8,6 @@ com/tradingbot/controller/DashboardController.class
 com/tradingbot/dto/AiRequestDto.class
 com/tradingbot/controller/HealthController.class
 com/tradingbot/dto/DashboardDto.class
-com/tradingbot/scheduler/LiveTradeMonitorScheduler.class
 com/tradingbot/util/JsonUtil.class
 com/tradingbot/risk/RiskCheckResult.class
 com/tradingbot/config/AppConfig.class
@@ -23,6 +22,7 @@ com/tradingbot/mapper/NewsMapper.class
 com/tradingbot/trading/ScoringEngine$1.class
 com/tradingbot/binance/BinanceFuturesApiClient.class
 com/tradingbot/binance/BinanceSignatureUtil.class
+com/tradingbot/service/AccountBalanceSyncService.class
 com/tradingbot/TradingBotApplication.class
 com/tradingbot/config/RedisConfig.class
 com/tradingbot/trading/TradeScore.class

@@ -36,6 +36,8 @@ public class DashboardDto {
         private BigDecimal totalPnl;
         private BigDecimal todayPnl;
         private double winRate;
+        private double riskPercent;
+        private double riskAmountUsd;
     }
 
     @Data

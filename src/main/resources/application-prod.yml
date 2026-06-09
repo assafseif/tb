@@ -1,0 +1,14 @@
+risk:
+  max-risk-per-trade: ${RISK_MAX_PER_TRADE:0.01}
+  max-daily-loss: ${RISK_MAX_DAILY_LOSS:0.03}
+  max-open-trades: ${RISK_MAX_OPEN_TRADES:10}
+  minimum-confidence: ${RISK_MIN_CONFIDENCE:55}
+
+scoring:
+  weights:
+    sentiment: 0.40
+    trend: 0.25
+    volume: 0.15
+    rsi: 0.20
+  buy-threshold: 72.0
+  sell-threshold: 35.0

@@ -126,10 +126,7 @@ public class ScoringEngine {
     }
 
     private double calculateRsiScore(double rsi) {
-        // Normalize RSI to 0-100 scoring:
-        // RSI 30-70 = neutral zone = 50 score
-        // RSI < 30 (oversold) = bullish opportunity = high score
-        // RSI > 70 (overbought) = bearish caution = low score
+        // Mean-reversion: buy oversold dips, avoid overbought tops
         if (rsi <= 20) return 90.0;
         if (rsi <= 30) return 75.0;
         if (rsi <= 45) return 60.0;

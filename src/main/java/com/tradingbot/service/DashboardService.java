@@ -1,5 +1,7 @@
 package com.tradingbot.service;
 
+import com.tradingbot.config.AccountProperties;
+import com.tradingbot.config.RiskProperties;
 import com.tradingbot.config.TradingProperties;
 import com.tradingbot.dto.DashboardDto;
 import com.tradingbot.dto.DashboardDto.*;
@@ -20,6 +22,8 @@ import java.math.BigDecimal;
 public class DashboardService {
 
     private final TradingProperties tradingProperties;
+    private final RiskProperties riskProperties;
+    private final AccountProperties accountProperties;
     private final NewsService newsService;
     private final SignalService signalService;
     private final TradeService tradeService;
@@ -64,13 +68,19 @@ public class DashboardService {
                         Mono.fromCallable(() -> tradeRepository.countByStatus(TradeStatus.CLOSED)).subscribeOn(Schedulers.boundedElastic()),
                         tradeService.getTodayPnl()
                 )
-                .map(tuple -> TradingStats.builder()
-                        .totalTrades(tuple.getT1())
-                        .openTrades(tuple.getT2())
-                        .closedTrades(tuple.getT3())
-                        .todayPnl(tuple.getT4())
-                        .totalPnl(BigDecimal.ZERO)
-                        .winRate(0.0)
-                        .build());
+                .map(tuple -> {
+                    double riskPercent = riskProperties.getMaxRiskPerTrade();
+                    double riskAmountUsd = accountProperties.getBalance() * riskPercent;
+                    return TradingStats.builder()
+                            .totalTrades(tuple.getT1())
+                            .openTrades(tuple.getT2())
+                            .closedTrades(tuple.getT3())
+                            .todayPnl(tuple.getT4())
+                            .totalPnl(BigDecimal.ZERO)
+                            .winRate(0.0)
+                            .riskPercent(riskPercent)
+                            .riskAmountUsd(riskAmountUsd)
+                            .build();
+                });
     }
 }

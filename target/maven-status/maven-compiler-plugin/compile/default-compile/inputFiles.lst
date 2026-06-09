@@ -16,6 +16,7 @@
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/binance/BinanceFuturesApiClient.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/binance/BinanceOrderResponse.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/news/NewsAggregatorService.java
+/var/www/html/claude/trading-bot/src/main/java/com/tradingbot/service/AccountBalanceSyncService.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/dto/NewsEventDto.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/repository/TradeSignalRepository.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/ai/SentimentResult.java
@@ -25,7 +26,6 @@
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/TradingBotApplication.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/market/MarketDataService.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/market/CandleData.java
-/var/www/html/claude/trading-bot/src/main/java/com/tradingbot/scheduler/LiveTradeMonitorScheduler.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/entity/enums/TradeStatus.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/risk/RiskManager.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/config/ScoringProperties.java

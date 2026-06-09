@@ -10,7 +10,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import org.springframework.http.codec.ClientCodecConfigurer;
 import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
@@ -41,10 +43,16 @@ public class WebClientConfig {
 
     @Bean("binanceWebClient")
     public WebClient binanceWebClient() {
-        // Base URL defaults to testnet; BinanceFuturesClient resolves live vs testnet per-request
+        // Account endpoint returns ~270 KB — raise codec limit above the 256 KB default
+        ExchangeStrategies strategies = ExchangeStrategies.builder()
+                .codecs(ClientCodecConfigurer::defaultCodecs)
+                .codecs(c -> c.defaultCodecs().maxInMemorySize(2 * 1024 * 1024))
+                .build();
+
         return WebClient.builder()
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .clientConnector(new ReactorClientHttpConnector(buildHttpClient(30)))
+                .exchangeStrategies(strategies)
                 .filter(logResponse())
                 .build();
     }

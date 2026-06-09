@@ -15,6 +15,13 @@ public class BinanceOrderResponse {
     @JsonProperty("orderId")
     private Long orderId;
 
+    // Populated for algo orders (/fapi/v1/algoOrder)
+    @JsonProperty("algoId")
+    private Long algoId;
+
+    @JsonProperty("algoStatus")
+    private String algoStatus;
+
     @JsonProperty("symbol")
     private String symbol;
 

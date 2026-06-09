@@ -43,6 +43,16 @@ public class RiskManager {
                             openTrades, riskProperties.getMaxOpenTrades()));
         }
 
+        // One position per symbol — Binance one-way mode merges same-symbol orders
+        // into a single position, so a second entry would just increase size, not open a grid level.
+        boolean symbolAlreadyOpen = !tradeRepository
+                .findBySymbolAndStatusOrderByCreatedAtDesc(signal.getSymbol(), com.tradingbot.entity.enums.TradeStatus.OPEN)
+                .isEmpty();
+        if (symbolAlreadyOpen) {
+            return RiskCheckResult.rejected(
+                    "Position already open for %s — wait for SL/TP close".formatted(signal.getSymbol()));
+        }
+
         // Check daily loss limit
         double dailyLoss = getDailyLoss();
         double maxAllowedLoss = accountProperties.getBalance() * riskProperties.getMaxDailyLoss();
@@ -70,12 +80,14 @@ public class RiskManager {
         double positionSize = riskAmount / riskPerUnit;
         // Apply leverage
         positionSize = positionSize * accountProperties.getLeverage();
-        // Round to 3 decimal places for futures
-        positionSize = Math.floor(positionSize * 1000) / 1000.0;
 
-        // Use minimum lot size that satisfies both step size and min notional
+        // Enforce minimum lot size — take whichever is larger
         double minQty = minimumQuantity(signal.getSymbol(), entryPrice);
-        positionSize = minQty;
+        positionSize = Math.max(positionSize, minQty);
+
+        // Snap to the symbol's step size
+        double step = stepSize(signal.getSymbol());
+        positionSize = Math.floor(positionSize / step) * step;
 
         if (positionSize <= 0) {
             return RiskCheckResult.rejected("Calculated position size is zero");
@@ -133,6 +145,14 @@ public class RiskManager {
 
     public boolean isDailyLimitBreached() {
         return getDailyLoss() >= accountProperties.getBalance() * riskProperties.getMaxDailyLoss();
+    }
+
+    private double stepSize(String symbol) {
+        return switch (symbol) {
+            case "BTCUSDT", "ETHUSDT" -> 0.001;
+            case "BNBUSDT", "SOLUSDT" -> 0.01;
+            default -> 0.01;
+        };
     }
 
     private double minimumQuantity(String symbol, double entryPrice) {
