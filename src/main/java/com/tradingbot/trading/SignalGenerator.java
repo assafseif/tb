@@ -3,13 +3,16 @@ package com.tradingbot.trading;
 import com.tradingbot.ai.AiAnalysisService;
 import com.tradingbot.ai.SentimentResult;
 import com.tradingbot.config.ScoringProperties;
+import com.tradingbot.config.TradingProperties;
 import com.tradingbot.entity.TradeSignal;
 import com.tradingbot.entity.enums.SignalStatus;
 import com.tradingbot.entity.enums.TradeSide;
+import com.tradingbot.entity.enums.TradeStatus;
 import com.tradingbot.indicators.IndicatorResult;
 import com.tradingbot.indicators.IndicatorService;
 import com.tradingbot.market.MarketDataService;
 import com.tradingbot.market.MarketSnapshot;
+import com.tradingbot.repository.ExecutedTradeRepository;
 import com.tradingbot.repository.TradeSignalRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,8 +33,10 @@ public class SignalGenerator {
     private final IndicatorService indicatorService;
     private final ScoringEngine scoringEngine;
     private final ScoringProperties scoringProperties;
+    private final TradingProperties tradingProperties;
     private final TradeSignalRepository signalRepository;
     private final AiAnalysisService aiAnalysisService;
+    private final ExecutedTradeRepository tradeRepository;
 
     public Flux<TradeSignal> generateSignals() {
         return marketDataService.getAllSnapshots()
@@ -41,6 +46,20 @@ public class SignalGenerator {
     }
 
     private Mono<TradeSignal> processSnapshot(MarketSnapshot snapshot) {
+        return Mono.fromCallable(() ->
+                        !tradeRepository.findBySymbolAndStatusOrderByCreatedAtDesc(
+                                snapshot.getSymbol(), TradeStatus.OPEN).isEmpty())
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(hasOpenPosition -> {
+                    if (hasOpenPosition) {
+                        log.debug("{}: skipping signal generation — position already open", snapshot.getSymbol());
+                        return Mono.empty();
+                    }
+                    return processSnapshotInner(snapshot);
+                });
+    }
+
+    private Mono<TradeSignal> processSnapshotInner(MarketSnapshot snapshot) {
         return Mono.fromCallable(() -> {
             IndicatorResult indicators = indicatorService.calculate(snapshot);
             TradeScore score = scoringEngine.score(snapshot.getSymbol(), indicators);
@@ -99,21 +118,25 @@ public class SignalGenerator {
         BigDecimal entryPrice = snapshot.getCurrentPrice();
         boolean isBuy = "BUY".equals(score.getAction());
 
-        // SL = Entry ± 2 * ATR; TP = Entry ± 4 * ATR
         double atr = indicators.getAtr14();
         if (atr <= 0) {
             atr = entryPrice.doubleValue() * 0.01; // Fallback: 1% of price
         }
 
+        // In testing mode use small but viable multipliers — large enough to survive
+        // the 2-4s between entry fill and algo order placement without immediately triggering
+        double slMultiplier = tradingProperties.isTestingMode() ? 0.5 : 2.0;
+        double tpMultiplier = tradingProperties.isTestingMode() ? 1.0 : 4.0;
+
         BigDecimal atrBD = BigDecimal.valueOf(atr);
         BigDecimal sl, tp;
 
         if (isBuy) {
-            sl = entryPrice.subtract(atrBD.multiply(BigDecimal.valueOf(2)));
-            tp = entryPrice.add(atrBD.multiply(BigDecimal.valueOf(4)));
+            sl = entryPrice.subtract(atrBD.multiply(BigDecimal.valueOf(slMultiplier)));
+            tp = entryPrice.add(atrBD.multiply(BigDecimal.valueOf(tpMultiplier)));
         } else {
-            sl = entryPrice.add(atrBD.multiply(BigDecimal.valueOf(2)));
-            tp = entryPrice.subtract(atrBD.multiply(BigDecimal.valueOf(4)));
+            sl = entryPrice.add(atrBD.multiply(BigDecimal.valueOf(slMultiplier)));
+            tp = entryPrice.subtract(atrBD.multiply(BigDecimal.valueOf(tpMultiplier)));
         }
 
         return TradeSignal.builder()

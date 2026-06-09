@@ -17,6 +17,8 @@ import reactor.util.retry.Retry;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Map;
 
 @Slf4j
@@ -104,6 +106,56 @@ public class BinanceFuturesApiClient {
                 });
     }
 
+    public Mono<JsonNode> getPositionRisk(String symbol) {
+        long timestamp = System.currentTimeMillis();
+        String queryString = "symbol=" + symbol
+                + "&timestamp=" + timestamp
+                + "&recvWindow=" + binanceProperties.getRecvWindow();
+        String signature = BinanceSignatureUtil.sign(queryString, binanceProperties.getApiSecret());
+
+        return binanceWebClient.get()
+                .uri(binanceProperties.getActiveBaseUrl() + "/fapi/v2/positionRisk?" + queryString + "&signature=" + signature)
+                .header("X-MBX-APIKEY", binanceProperties.getApiKey())
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .onErrorResume(ex -> {
+                    log.error("Failed to get position risk for {}: {}", symbol, ex.getMessage());
+                    return Mono.empty();
+                });
+    }
+
+    public Mono<BigDecimal> getTodayRealizedPnl() {
+        long startOfDay = LocalDate.now(ZoneOffset.UTC).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
+        long now = System.currentTimeMillis();
+        long timestamp = now;
+        String queryString = "incomeType=REALIZED_PNL"
+                + "&startTime=" + startOfDay
+                + "&endTime=" + now
+                + "&limit=1000"
+                + "&timestamp=" + timestamp
+                + "&recvWindow=" + binanceProperties.getRecvWindow();
+        String signature = BinanceSignatureUtil.sign(queryString, binanceProperties.getApiSecret());
+
+        return binanceWebClient.get()
+                .uri(binanceProperties.getActiveBaseUrl() + "/fapi/v1/income?" + queryString + "&signature=" + signature)
+                .header("X-MBX-APIKEY", binanceProperties.getApiKey())
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .map(node -> {
+                    BigDecimal total = BigDecimal.ZERO;
+                    if (node.isArray()) {
+                        for (JsonNode entry : node) {
+                            total = total.add(new BigDecimal(entry.get("income").asText("0")));
+                        }
+                    }
+                    return total;
+                })
+                .onErrorResume(ex -> {
+                    log.error("Failed to fetch today's realized PnL from Binance: {}", ex.getMessage());
+                    return Mono.just(BigDecimal.ZERO);
+                });
+    }
+
     public Mono<Double> getAvailableBalance() {
         return getAccountInfo()
                 .map(node -> node.get("availableBalance").asDouble())
@@ -123,6 +175,33 @@ public class BinanceFuturesApiClient {
         return placeAlgoOrder(symbol, closeSide, "TAKE_PROFIT_MARKET", takeProfitPrice, "TP");
     }
 
+    public Mono<BinanceOrderResponse> closePositionMarket(String symbol, String closeSide) {
+        log.info("Placing emergency market close: symbol={} side={}", symbol, closeSide);
+        return Mono.defer(() -> {
+            long timestamp = System.currentTimeMillis();
+            String queryString = "symbol=" + symbol
+                    + "&side=" + closeSide
+                    + "&type=MARKET"
+                    + "&closePosition=true"
+                    + "&timestamp=" + timestamp
+                    + "&recvWindow=" + binanceProperties.getRecvWindow();
+            String signature = BinanceSignatureUtil.sign(queryString, binanceProperties.getApiSecret());
+
+            return binanceWebClient.post()
+                    .uri(binanceProperties.getActiveBaseUrl() + "/fapi/v1/order")
+                    .header("X-MBX-APIKEY", binanceProperties.getApiKey())
+                    .header(HttpHeaders.CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(BodyInserters.fromValue(queryString + "&signature=" + signature))
+                    .retrieve()
+                    .bodyToMono(BinanceOrderResponse.class);
+        })
+        .doOnSuccess(resp -> log.info("Emergency close filled: orderId={} symbol={}", resp.getOrderId(), symbol))
+        .onErrorMap(WebClientResponseException.class, ex -> {
+            log.error("Emergency close failed: {} - {}", ex.getStatusCode(), ex.getResponseBodyAsString());
+            return new RuntimeException("Emergency close failed: " + ex.getResponseBodyAsString(), ex);
+        });
+    }
+
     private BigDecimal roundToTickSize(String symbol, BigDecimal price) {
         BigDecimal tick = TICK_SIZE.getOrDefault(symbol, new BigDecimal("0.01"));
         int scale = tick.stripTrailingZeros().scale();
@@ -132,30 +211,40 @@ public class BinanceFuturesApiClient {
     private Mono<BinanceOrderResponse> placeAlgoOrder(String symbol, String side, String orderType,
                                                        BigDecimal triggerPrice, String label) {
         BigDecimal roundedPrice = roundToTickSize(symbol, triggerPrice);
-        long timestamp = System.currentTimeMillis();
-        String queryString = "symbol=" + symbol
-                + "&side=" + side
-                + "&algoType=CONDITIONAL"
-                + "&type=" + orderType
-                + "&triggerPrice=" + roundedPrice.toPlainString()
-                + "&closePosition=true"
-                + "&timestamp=" + timestamp
-                + "&recvWindow=" + binanceProperties.getRecvWindow();
-        String signature = BinanceSignatureUtil.sign(queryString, binanceProperties.getApiSecret());
 
         log.info("Placing {} algo order: symbol={} side={} triggerPrice={} (raw {})",
                 label, symbol, side, roundedPrice, triggerPrice);
 
-        return binanceWebClient.post()
-                .uri(binanceProperties.getActiveBaseUrl() + "/fapi/v1/algoOrder")
-                .header("X-MBX-APIKEY", binanceProperties.getApiKey())
-                .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, "application/x-www-form-urlencoded")
-                .body(org.springframework.web.reactive.function.BodyInserters.fromValue(queryString + "&signature=" + signature))
-                .retrieve()
-                .bodyToMono(BinanceOrderResponse.class)
+        // Mono.defer ensures a fresh timestamp (and signature) on every retry attempt
+        return Mono.defer(() -> {
+                    long timestamp = System.currentTimeMillis();
+                    String queryString = "symbol=" + symbol
+                            + "&side=" + side
+                            + "&algoType=CONDITIONAL"
+                            + "&type=" + orderType
+                            + "&triggerPrice=" + roundedPrice.toPlainString()
+                            + "&closePosition=true"
+                            + "&timestamp=" + timestamp
+                            + "&recvWindow=" + binanceProperties.getRecvWindow();
+                    String signature = BinanceSignatureUtil.sign(queryString, binanceProperties.getApiSecret());
+
+                    return binanceWebClient.post()
+                            .uri(binanceProperties.getActiveBaseUrl() + "/fapi/v1/algoOrder")
+                            .header("X-MBX-APIKEY", binanceProperties.getApiKey())
+                            .header(HttpHeaders.CONTENT_TYPE, "application/x-www-form-urlencoded")
+                            .body(BodyInserters.fromValue(queryString + "&signature=" + signature))
+                            .retrieve()
+                            .bodyToMono(BinanceOrderResponse.class);
+                })
+                // Binance takes ~3s to register a new position; retry up to 4x at 1.5s intervals on -4509
+                .retryWhen(Retry.fixedDelay(4, Duration.ofMillis(1500))
+                        .filter(ex -> ex instanceof WebClientResponseException &&
+                                ((WebClientResponseException) ex).getResponseBodyAsString().contains("-4509"))
+                        .doBeforeRetry(rs -> log.warn("{} position not yet available (-4509), retrying ({}/4)...",
+                                symbol, rs.totalRetries() + 1)))
                 .doOnSuccess(resp -> log.info("{} algo order placed: algoId={} symbol={} triggerPrice={}",
                         label, resp.getAlgoId(), symbol, roundedPrice))
-                .onErrorMap(org.springframework.web.reactive.function.client.WebClientResponseException.class, ex -> {
+                .onErrorMap(WebClientResponseException.class, ex -> {
                     log.error("Binance {} algo order failed: {} - {}", label, ex.getStatusCode(), ex.getResponseBodyAsString());
                     return new RuntimeException("Binance " + label + " order failed: " + ex.getResponseBodyAsString(), ex);
                 });

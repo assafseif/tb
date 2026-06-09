@@ -97,6 +97,7 @@ com/tradingbot/config/CorsConfig.class
 com/tradingbot/scheduler/PaperTradeMonitorScheduler.class
 com/tradingbot/binance/BinanceOrderRequest$BinanceOrderRequestBuilder.class
 com/tradingbot/repository/NewsEventRepository.class
+com/tradingbot/scheduler/LiveTradeStatusSyncScheduler.class
 com/tradingbot/config/PaperTradingProperties.class
 com/tradingbot/market/MarketSnapshot$MarketSnapshotBuilder.class
 com/tradingbot/dto/SentimentDto$SentimentDtoBuilder.class

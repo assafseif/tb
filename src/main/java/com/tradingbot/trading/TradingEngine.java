@@ -116,17 +116,42 @@ public class TradingEngine {
                 .flatMap(response -> Mono.fromCallable(() -> {
                     trade.setBinanceOrderId(response.getOrderId());
                     trade.setStatus(TradeStatus.OPEN);
+
+                    // Recalculate SL/TP from actual fill price so stale signal price doesn't cause
+                    // immediate-trigger errors — preserve the same absolute distance from the signal
+                    BigDecimal fillPrice = (response.getAvgPrice() != null && response.getAvgPrice().compareTo(BigDecimal.ZERO) > 0)
+                            ? response.getAvgPrice()
+                            : trade.getEntryPrice();
+                    boolean isBuy = trade.getSide() == com.tradingbot.entity.enums.TradeSide.BUY;
+                    BigDecimal slDist = trade.getEntryPrice().subtract(trade.getStopLoss()).abs();
+                    BigDecimal tpDist = trade.getTakeProfit().subtract(trade.getEntryPrice()).abs();
+                    trade.setEntryPrice(fillPrice);
+                    trade.setStopLoss(isBuy ? fillPrice.subtract(slDist) : fillPrice.add(slDist));
+                    trade.setTakeProfit(isBuy ? fillPrice.add(tpDist) : fillPrice.subtract(tpDist));
+
                     signalRepository.updateStatus(signal.getId(), SignalStatus.EXECUTED, LocalDateTime.now());
                     return tradeRepository.save(trade);
                 }).subscribeOn(Schedulers.boundedElastic()))
-                // Wait for Binance to establish the position before placing SL/TP algo orders
-                // (algo orders with GTE_GTC reject immediately if no open position exists yet)
-                .delayElement(java.time.Duration.ofMillis(1500))
+                // Give Binance ~2s head-start; placeAlgoOrder retries on -4509 if still not ready
+                .delayElement(java.time.Duration.ofMillis(2000))
                 .flatMap(saved -> binanceApiClient.placeStopLoss(saved.getSymbol(), closeSide, saved.getStopLoss())
                         .doOnSuccess(r -> log.info("SL order placed: orderId={} symbol={} stopPrice={}", r.getOrderId(), saved.getSymbol(), saved.getStopLoss()))
                         .onErrorResume(ex -> {
-                            log.error("Failed to place SL order for trade {}: {}", saved.getId(), ex.getMessage());
-                            return Mono.empty();
+                            log.error("SL placement failed for trade {} — closing position immediately: {}", saved.getId(), ex.getMessage());
+                            return binanceApiClient.closePositionMarket(saved.getSymbol(), closeSide)
+                                    .flatMap(r -> Mono.fromCallable(() -> {
+                                        saved.setStatus(TradeStatus.CLOSED);
+                                        saved.setErrorMessage("SL placement failed; position closed at market: " + ex.getMessage());
+                                        return tradeRepository.save(saved);
+                                    }).subscribeOn(Schedulers.boundedElastic()))
+                                    .onErrorResume(closeEx -> {
+                                        log.error("Emergency close also failed for trade {} {}: {}", saved.getId(), saved.getSymbol(), closeEx.getMessage());
+                                        return Mono.fromCallable(() -> {
+                                            saved.setErrorMessage("SL failed AND emergency close failed: " + closeEx.getMessage());
+                                            return tradeRepository.save(saved);
+                                        }).subscribeOn(Schedulers.boundedElastic());
+                                    })
+                                    .then(Mono.empty());
                         })
                         .thenReturn(saved))
                 .flatMap(saved -> binanceApiClient.placeTakeProfit(saved.getSymbol(), closeSide, saved.getTakeProfit())

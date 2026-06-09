@@ -63,6 +63,7 @@
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/util/DateUtil.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/scheduler/NewsFetchScheduler.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/trading/SignalGenerator.java
+/var/www/html/claude/trading-bot/src/main/java/com/tradingbot/scheduler/LiveTradeStatusSyncScheduler.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/controller/HealthController.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/trading/TradeScore.java
 /var/www/html/claude/trading-bot/src/main/java/com/tradingbot/entity/enums/SentimentType.java

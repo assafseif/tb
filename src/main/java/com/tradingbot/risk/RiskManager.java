@@ -81,6 +81,10 @@ public class RiskManager {
         // Apply leverage
         positionSize = positionSize * accountProperties.getLeverage();
 
+        // Never let the notional value exceed available margin × leverage
+        double maxPositionByMargin = (accountProperties.getBalance() * accountProperties.getLeverage()) / entryPrice;
+        positionSize = Math.min(positionSize, maxPositionByMargin);
+
         // Enforce minimum lot size — take whichever is larger
         double minQty = minimumQuantity(signal.getSymbol(), entryPrice);
         positionSize = Math.max(positionSize, minQty);

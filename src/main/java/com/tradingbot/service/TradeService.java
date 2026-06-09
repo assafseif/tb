@@ -1,5 +1,6 @@
 package com.tradingbot.service;
 
+import com.tradingbot.binance.BinanceFuturesApiClient;
 import com.tradingbot.dto.ExecutedTradeDto;
 import com.tradingbot.entity.enums.TradeStatus;
 import com.tradingbot.mapper.ExecutedTradeMapper;
@@ -12,7 +13,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
 @Slf4j
 @Service
@@ -21,6 +21,7 @@ public class TradeService {
 
     private final ExecutedTradeRepository tradeRepository;
     private final ExecutedTradeMapper tradeMapper;
+    private final BinanceFuturesApiClient binanceApiClient;
 
     public Flux<ExecutedTradeDto> getLatestTrades() {
         return Mono.fromCallable(() ->
@@ -42,10 +43,6 @@ public class TradeService {
     }
 
     public Mono<BigDecimal> getTodayPnl() {
-        LocalDateTime startOfDay = LocalDateTime.now().toLocalDate().atStartOfDay();
-        return Mono.fromCallable(() -> {
-            BigDecimal pnl = tradeRepository.sumRealizedPnlAfter(startOfDay);
-            return pnl != null ? pnl : BigDecimal.ZERO;
-        }).subscribeOn(Schedulers.boundedElastic());
+        return binanceApiClient.getTodayRealizedPnl();
     }
 }

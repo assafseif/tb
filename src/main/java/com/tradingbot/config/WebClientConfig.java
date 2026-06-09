@@ -61,6 +61,7 @@ public class WebClientConfig {
     public WebClient newsWebClient() {
         return WebClient.builder()
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                .defaultHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (compatible; TradingBot/1.0)")
                 .clientConnector(new ReactorClientHttpConnector(buildHttpClient(15)))
                 .build();
     }

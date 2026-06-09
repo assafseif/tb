@@ -41,6 +41,11 @@ public class CryptoCompareNewsCollector implements NewsCollector {
 
     @Override
     public Flux<NewsEvent> fetchLatestNews() {
+        if (apiKey == null || apiKey.isBlank()) {
+            log.debug("CryptoCompare API key not configured — skipping");
+            return Flux.empty();
+        }
+
         WebClient.RequestHeadersSpec<?> req = newsWebClient.get()
                 .uri(baseUrl + "?lang=EN&categories=" + categories + "&sortOrder=latest");
 

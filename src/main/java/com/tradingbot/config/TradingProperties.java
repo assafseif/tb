@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class TradingProperties {
 
     private boolean enabled = false;
+    private boolean testingMode = false;
 
     // Runtime-mutable flags (modified via REST API at runtime)
     private final AtomicBoolean tradingEnabledRuntime = new AtomicBoolean(false);

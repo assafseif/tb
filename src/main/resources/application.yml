@@ -61,6 +61,8 @@ management:
 # Trading Configuration
 trading:
   enabled: ${TRADING_ENABLED:true}
+  # When true, stop loss and take profit use very small distances (for quick testing)
+  testing-mode: true
 
 paper-trading:
   enabled: ${PAPER_TRADING_ENABLED:false}
@@ -99,7 +101,8 @@ news:
   rss-feeds:
     - https://cointelegraph.com/rss
     - https://decrypt.co/feed
-    - https://bitcoinmagazine.com/feed
+    - https://cryptonews.com/news/feed/
+    - https://beincrypto.com/feed/
     - https://cryptopotato.com/feed/
 
 # Risk Management
