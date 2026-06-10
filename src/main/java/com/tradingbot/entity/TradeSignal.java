@@ -1,5 +1,6 @@
 package com.tradingbot.entity;
 
+import com.tradingbot.entity.enums.NewsUrgency;
 import com.tradingbot.entity.enums.TradeSide;
 import com.tradingbot.entity.enums.SignalStatus;
 import jakarta.persistence.*;
@@ -69,6 +70,11 @@ public class TradeSignal {
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    @Builder.Default
+    private NewsUrgency urgency = NewsUrgency.WITHIN_4H;
 
     @Column(name = "processed_at")
     private LocalDateTime processedAt;

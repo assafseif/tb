@@ -28,10 +28,10 @@ public class RiskManager {
     private static final String DAILY_GAIN_KEY = "risk:daily_gain:";
 
     public RiskCheckResult evaluate(TradeSignal signal) {
-        // Check minimum confidence
+        // Check minimum AI sentiment confidence
         if (signal.getConfidence() < riskProperties.getMinimumConfidence()) {
             return RiskCheckResult.rejected(
-                    "Confidence %d below minimum %d".formatted(
+                    "AI confidence %d below minimum %d".formatted(
                             signal.getConfidence(), riskProperties.getMinimumConfidence()));
         }
 
@@ -85,8 +85,12 @@ public class RiskManager {
         double maxPositionByMargin = (accountProperties.getBalance() * accountProperties.getLeverage()) / entryPrice;
         positionSize = Math.min(positionSize, maxPositionByMargin);
 
-        // Enforce minimum lot size — take whichever is larger
+        // Enforce minimum lot size — but never let it push past the margin cap
         double minQty = minimumQuantity(signal.getSymbol(), entryPrice);
+        if (minQty > maxPositionByMargin) {
+            return RiskCheckResult.rejected(
+                    "Insufficient balance for minimum notional on %s".formatted(signal.getSymbol()));
+        }
         positionSize = Math.max(positionSize, minQty);
 
         // Snap to the symbol's step size

@@ -11,7 +11,6 @@ import java.time.LocalDateTime;
 public class NewsEventDto {
     private Long id;
     private String title;
-    private String content;
     private String source;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime publishedAt;
@@ -19,4 +18,15 @@ public class NewsEventDto {
     private String categories;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createdAt;
+
+    // sentiment analysis fields (null when not yet analyzed)
+    private String symbol;
+    private String sentiment;
+    private Integer confidence;
+    private Integer impact;
+    private String urgency;
+    private String aiReason;
+
+    // null when analyzed or pending; set when article was skipped due to age
+    private String rejectionReason;
 }

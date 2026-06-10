@@ -1,13 +1,22 @@
 package com.tradingbot.trading;
 
+import com.tradingbot.ai.AiAnalysisService;
+import com.tradingbot.ai.SentimentResult;
 import com.tradingbot.binance.BinanceFuturesApiClient;
 import com.tradingbot.binance.BinanceOrderRequest;
 import com.tradingbot.binance.BinanceOrderResponse;
+import com.tradingbot.config.AccountProperties;
+import com.tradingbot.config.PaperTradingProperties;
 import com.tradingbot.config.TradingProperties;
+import jakarta.annotation.PostConstruct;
 import com.tradingbot.entity.ExecutedTrade;
 import com.tradingbot.entity.TradeSignal;
 import com.tradingbot.entity.enums.SignalStatus;
 import com.tradingbot.entity.enums.TradeStatus;
+import com.tradingbot.indicators.IndicatorResult;
+import com.tradingbot.indicators.IndicatorService;
+import com.tradingbot.market.MarketDataService;
+import com.tradingbot.market.MarketSnapshot;
 import com.tradingbot.repository.ExecutedTradeRepository;
 import com.tradingbot.repository.TradeSignalRepository;
 import com.tradingbot.risk.RiskCheckResult;
@@ -32,6 +41,19 @@ public class TradingEngine {
     private final RiskManager riskManager;
     private final BinanceFuturesApiClient binanceApiClient;
     private final TradingProperties tradingProperties;
+    private final PaperTradingProperties paperTradingProperties;
+    private final AccountProperties accountProperties;
+    private final AiAnalysisService aiAnalysisService;
+    private final MarketDataService marketDataService;
+    private final IndicatorService indicatorService;
+
+    @PostConstruct
+    void init() {
+        if (paperTradingProperties.isEnabled()) {
+            tradingProperties.getPaperTradingEnabledRuntime().set(true);
+            log.info("Paper trading mode enabled from configuration");
+        }
+    }
 
     public Flux<ExecutedTrade> processPendingSignals() {
         return Mono.fromCallable(() ->
@@ -84,7 +106,16 @@ public class TradingEngine {
             if (trade == null) return Mono.empty();
 
             if (!trade.isPaperTrade()) {
-                return executeLiveTrade(trade, signal);
+                return binanceApiClient.getAvailableBalance()
+                        .doOnNext(bal -> {
+                            if (bal != null && bal > 0) accountProperties.setBalance(bal);
+                        })
+                        .onErrorResume(ex -> {
+                            log.warn("Could not refresh balance before trade, using cached ${}: {}",
+                                    String.format("%.2f", accountProperties.getBalance()), ex.getMessage());
+                            return Mono.empty();
+                        })
+                        .then(executeLiveTrade(trade, signal));
             }
             return Mono.fromCallable(() -> {
                 signalRepository.updateStatus(signal.getId(), SignalStatus.EXECUTED, LocalDateTime.now());
@@ -111,8 +142,36 @@ public class TradingEngine {
                 .build();
 
         String closeSide = trade.getSide() == com.tradingbot.entity.enums.TradeSide.BUY ? "SELL" : "BUY";
+        String tradeSide = trade.getSide().name();
 
-        return binanceApiClient.placeOrder(entryRequest)
+        return marketDataService.getSnapshot(trade.getSymbol())
+                .flatMap(snapshot -> {
+                    IndicatorResult indicators = indicatorService.calculate(snapshot);
+                    return aiAnalysisService.confirmFinalOrder(
+                            trade.getSymbol(), tradeSide,
+                            trade.getStopLoss(), trade.getTakeProfit(),
+                            snapshot, indicators);
+                })
+                .flatMap(confirmation -> {
+                    boolean approved = tradeSide.equals("BUY")
+                            ? "BULLISH".equalsIgnoreCase(confirmation.getSentimentRaw())
+                            : "BEARISH".equalsIgnoreCase(confirmation.getSentimentRaw());
+
+                    log.info("[FINAL GATE] {} {} — AI strategy check: {} confidence={} | {} → {}",
+                            tradeSide, trade.getSymbol(),
+                            confirmation.getSentimentRaw(), confirmation.getConfidence(),
+                            confirmation.getReason(),
+                            approved ? "APPROVED" : "REJECTED");
+
+                    if (!approved) {
+                        return Mono.fromCallable(() -> {
+                            trade.setStatus(TradeStatus.FAILED);
+                            trade.setErrorMessage("Final AI strategy gate rejected: " + confirmation.getReason());
+                            signalRepository.updateStatus(signal.getId(), SignalStatus.REJECTED, LocalDateTime.now());
+                            return tradeRepository.save(trade);
+                        }).subscribeOn(Schedulers.boundedElastic()).then(Mono.empty());
+                    }
+                    return binanceApiClient.placeOrder(entryRequest)
                 .flatMap(response -> Mono.fromCallable(() -> {
                     trade.setBinanceOrderId(response.getOrderId());
                     trade.setStatus(TradeStatus.OPEN);
@@ -151,7 +210,7 @@ public class TradingEngine {
                                             return tradeRepository.save(saved);
                                         }).subscribeOn(Schedulers.boundedElastic());
                                     })
-                                    .then(Mono.empty());
+                                    .then(Mono.error(new RuntimeException("SL failed — position closed, skipping TP")));
                         })
                         .thenReturn(saved))
                 .flatMap(saved -> binanceApiClient.placeTakeProfit(saved.getSymbol(), closeSide, saved.getTakeProfit())
@@ -166,6 +225,17 @@ public class TradingEngine {
                     return Mono.fromCallable(() -> {
                         trade.setStatus(TradeStatus.FAILED);
                         trade.setErrorMessage(ex.getMessage());
+                        signalRepository.updateStatus(signal.getId(), SignalStatus.REJECTED, LocalDateTime.now());
+                        return tradeRepository.save(trade);
+                    }).subscribeOn(Schedulers.boundedElastic());
+                });
+                }) // closes flatMap(confirmation ->
+                .onErrorResume(ex -> {
+                    log.error("Final gate or snapshot failed for signal={} {}: {}",
+                            signal.getId(), trade.getSymbol(), ex.getMessage());
+                    return Mono.fromCallable(() -> {
+                        trade.setStatus(TradeStatus.FAILED);
+                        trade.setErrorMessage("Pre-order gate failed: " + ex.getMessage());
                         signalRepository.updateStatus(signal.getId(), SignalStatus.REJECTED, LocalDateTime.now());
                         return tradeRepository.save(trade);
                     }).subscribeOn(Schedulers.boundedElastic());

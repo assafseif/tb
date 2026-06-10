@@ -20,6 +20,7 @@ com/tradingbot/market/CandleData$CandleDataBuilder.class
 com/tradingbot/binance/BinanceOrderRequest.class
 com/tradingbot/mapper/NewsMapper.class
 com/tradingbot/trading/ScoringEngine$1.class
+com/tradingbot/entity/enums/NewsUrgency.class
 com/tradingbot/binance/BinanceFuturesApiClient.class
 com/tradingbot/binance/BinanceSignatureUtil.class
 com/tradingbot/service/AccountBalanceSyncService.class
@@ -109,4 +110,5 @@ com/tradingbot/dto/DashboardDto$SystemStatus.class
 com/tradingbot/ai/SentimentResult.class
 com/tradingbot/risk/RiskManager.class
 com/tradingbot/service/SentimentService.class
+com/tradingbot/trading/BreakingNewsProcessor.class
 com/tradingbot/util/RedisAvailabilityTracker.class

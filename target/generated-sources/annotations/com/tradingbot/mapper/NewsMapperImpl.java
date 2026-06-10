@@ -9,8 +9,8 @@ import org.springframework.stereotype.Component;
 
 @Generated(
     value = "org.mapstruct.ap.MappingProcessor",
-    date = "2026-06-09T15:12:05+0300",
-    comments = "version: 1.5.5.Final, compiler: javac, environment: Java 21.0.11 (Ubuntu)"
+    date = "2026-06-10T01:10:29+0300",
+    comments = "version: 1.5.5.Final, compiler: Eclipse JDT (IDE) 3.46.0.v20260407-0427, environment: Java 21.0.10 (Eclipse Adoptium)"
 )
 @Component
 public class NewsMapperImpl implements NewsMapper {
@@ -23,14 +23,13 @@ public class NewsMapperImpl implements NewsMapper {
 
         NewsEventDto.NewsEventDtoBuilder newsEventDto = NewsEventDto.builder();
 
-        newsEventDto.id( entity.getId() );
-        newsEventDto.title( entity.getTitle() );
-        newsEventDto.content( entity.getContent() );
-        newsEventDto.source( entity.getSource() );
-        newsEventDto.publishedAt( entity.getPublishedAt() );
-        newsEventDto.processed( entity.isProcessed() );
         newsEventDto.categories( entity.getCategories() );
         newsEventDto.createdAt( entity.getCreatedAt() );
+        newsEventDto.id( entity.getId() );
+        newsEventDto.processed( entity.isProcessed() );
+        newsEventDto.publishedAt( entity.getPublishedAt() );
+        newsEventDto.source( entity.getSource() );
+        newsEventDto.title( entity.getTitle() );
 
         return newsEventDto.build();
     }

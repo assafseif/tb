@@ -9,8 +9,8 @@ import org.springframework.stereotype.Component;
 
 @Generated(
     value = "org.mapstruct.ap.MappingProcessor",
-    date = "2026-06-09T15:12:06+0300",
-    comments = "version: 1.5.5.Final, compiler: javac, environment: Java 21.0.11 (Ubuntu)"
+    date = "2026-06-10T01:10:29+0300",
+    comments = "version: 1.5.5.Final, compiler: Eclipse JDT (IDE) 3.46.0.v20260407-0427, environment: Java 21.0.10 (Eclipse Adoptium)"
 )
 @Component
 public class SentimentMapperImpl implements SentimentMapper {
@@ -23,14 +23,14 @@ public class SentimentMapperImpl implements SentimentMapper {
 
         SentimentDto.SentimentDtoBuilder sentimentDto = SentimentDto.builder();
 
-        sentimentDto.id( entity.getId() );
-        sentimentDto.newsId( entity.getNewsId() );
-        sentimentDto.symbol( entity.getSymbol() );
-        sentimentDto.sentiment( entity.getSentiment() );
         sentimentDto.confidence( entity.getConfidence() );
-        sentimentDto.impact( entity.getImpact() );
-        sentimentDto.reason( entity.getReason() );
         sentimentDto.createdAt( entity.getCreatedAt() );
+        sentimentDto.id( entity.getId() );
+        sentimentDto.impact( entity.getImpact() );
+        sentimentDto.newsId( entity.getNewsId() );
+        sentimentDto.reason( entity.getReason() );
+        sentimentDto.sentiment( entity.getSentiment() );
+        sentimentDto.symbol( entity.getSymbol() );
 
         return sentimentDto.build();
     }

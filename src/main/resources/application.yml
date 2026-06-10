@@ -16,7 +16,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto:  create-drop
     show-sql: false
     open-in-view: false
     properties:
@@ -62,7 +62,7 @@ management:
 trading:
   enabled: ${TRADING_ENABLED:true}
   # When true, stop loss and take profit use very small distances (for quick testing)
-  testing-mode: true
+  testing-mode: false
 
 paper-trading:
   enabled: ${PAPER_TRADING_ENABLED:false}
@@ -95,8 +95,8 @@ news:
   cryptocompare-url: https://min-api.cryptocompare.com/data/news/
   cryptocompare-api-key: ${CRYPTOCOMPARE_API_KEY:}
   categories: BTC,ETH,Altcoin,Trading,Blockchain
-  max-age-hours: 4        # skip articles older than this — they won't affect the scoring engine anyway
-  max-per-cycle: 10       # max AI calls per scheduler run — controls cost in production
+  max-age-minutes: ${NEWS_MAX_AGE_MINUTES:240}
+  max-per-cycle: ${NEWS_MAX_PER_CYCLE:10}
   # RSS feeds require no API key
   rss-feeds:
     - https://cointelegraph.com/rss
@@ -115,7 +115,7 @@ risk:
   max-risk-per-trade: ${RISK_MAX_PER_TRADE:0.01}
   max-daily-loss: ${RISK_MAX_DAILY_LOSS:0.03}
   max-open-trades: ${RISK_MAX_OPEN_TRADES:10}
-  minimum-confidence: ${RISK_MIN_CONFIDENCE:5}
+  minimum-confidence: ${RISK_MIN_CONFIDENCE:50}
 
 # Scoring Engine
 scoring:

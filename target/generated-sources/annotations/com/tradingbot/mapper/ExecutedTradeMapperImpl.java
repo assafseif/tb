@@ -9,8 +9,8 @@ import org.springframework.stereotype.Component;
 
 @Generated(
     value = "org.mapstruct.ap.MappingProcessor",
-    date = "2026-06-09T15:12:06+0300",
-    comments = "version: 1.5.5.Final, compiler: javac, environment: Java 21.0.11 (Ubuntu)"
+    date = "2026-06-10T01:10:29+0300",
+    comments = "version: 1.5.5.Final, compiler: Eclipse JDT (IDE) 3.46.0.v20260407-0427, environment: Java 21.0.10 (Eclipse Adoptium)"
 )
 @Component
 public class ExecutedTradeMapperImpl implements ExecutedTradeMapper {
@@ -23,21 +23,21 @@ public class ExecutedTradeMapperImpl implements ExecutedTradeMapper {
 
         ExecutedTradeDto.ExecutedTradeDtoBuilder executedTradeDto = ExecutedTradeDto.builder();
 
-        executedTradeDto.id( entity.getId() );
-        executedTradeDto.symbol( entity.getSymbol() );
-        executedTradeDto.side( entity.getSide() );
-        executedTradeDto.quantity( entity.getQuantity() );
-        executedTradeDto.entryPrice( entity.getEntryPrice() );
-        executedTradeDto.stopLoss( entity.getStopLoss() );
-        executedTradeDto.takeProfit( entity.getTakeProfit() );
-        executedTradeDto.status( entity.getStatus() );
         executedTradeDto.binanceOrderId( entity.getBinanceOrderId() );
-        executedTradeDto.signalId( entity.getSignalId() );
-        executedTradeDto.paperTrade( entity.isPaperTrade() );
         executedTradeDto.closePrice( entity.getClosePrice() );
-        executedTradeDto.realizedPnl( entity.getRealizedPnl() );
-        executedTradeDto.errorMessage( entity.getErrorMessage() );
         executedTradeDto.createdAt( entity.getCreatedAt() );
+        executedTradeDto.entryPrice( entity.getEntryPrice() );
+        executedTradeDto.errorMessage( entity.getErrorMessage() );
+        executedTradeDto.id( entity.getId() );
+        executedTradeDto.paperTrade( entity.isPaperTrade() );
+        executedTradeDto.quantity( entity.getQuantity() );
+        executedTradeDto.realizedPnl( entity.getRealizedPnl() );
+        executedTradeDto.side( entity.getSide() );
+        executedTradeDto.signalId( entity.getSignalId() );
+        executedTradeDto.status( entity.getStatus() );
+        executedTradeDto.stopLoss( entity.getStopLoss() );
+        executedTradeDto.symbol( entity.getSymbol() );
+        executedTradeDto.takeProfit( entity.getTakeProfit() );
         executedTradeDto.updatedAt( entity.getUpdatedAt() );
 
         return executedTradeDto.build();

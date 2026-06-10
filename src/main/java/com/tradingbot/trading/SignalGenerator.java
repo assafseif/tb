@@ -1,9 +1,8 @@
 package com.tradingbot.trading;
 
-import com.tradingbot.ai.AiAnalysisService;
-import com.tradingbot.ai.SentimentResult;
 import com.tradingbot.config.ScoringProperties;
 import com.tradingbot.config.TradingProperties;
+import com.tradingbot.entity.enums.NewsUrgency;
 import com.tradingbot.entity.TradeSignal;
 import com.tradingbot.entity.enums.SignalStatus;
 import com.tradingbot.entity.enums.TradeSide;
@@ -35,17 +34,27 @@ public class SignalGenerator {
     private final ScoringProperties scoringProperties;
     private final TradingProperties tradingProperties;
     private final TradeSignalRepository signalRepository;
-    private final AiAnalysisService aiAnalysisService;
     private final ExecutedTradeRepository tradeRepository;
 
     public Flux<TradeSignal> generateSignals() {
         return marketDataService.getAllSnapshots()
-                .flatMap(this::processSnapshot)
+                .flatMap(snapshot -> processSnapshot(snapshot, NewsUrgency.WITHIN_4H))
                 .onErrorContinue((ex, obj) ->
                         log.error("Signal generation failed for {}: {}", obj, ex.getMessage()));
     }
 
-    private Mono<TradeSignal> processSnapshot(MarketSnapshot snapshot) {
+    public Mono<TradeSignal> generateSignalForSymbol(String symbol, NewsUrgency urgency) {
+        return marketDataService.getAllSnapshots()
+                .filter(s -> s.getSymbol().equals(symbol))
+                .next()
+                .flatMap(snapshot -> processSnapshot(snapshot, urgency))
+                .onErrorResume(ex -> {
+                    log.error("Immediate signal generation failed for {}: {}", symbol, ex.getMessage());
+                    return Mono.empty();
+                });
+    }
+
+    private Mono<TradeSignal> processSnapshot(MarketSnapshot snapshot, NewsUrgency urgency) {
         return Mono.fromCallable(() ->
                         !tradeRepository.findBySymbolAndStatusOrderByCreatedAtDesc(
                                 snapshot.getSymbol(), TradeStatus.OPEN).isEmpty())
@@ -55,11 +64,11 @@ public class SignalGenerator {
                         log.debug("{}: skipping signal generation — position already open", snapshot.getSymbol());
                         return Mono.empty();
                     }
-                    return processSnapshotInner(snapshot);
+                    return processSnapshotInner(snapshot, urgency);
                 });
     }
 
-    private Mono<TradeSignal> processSnapshotInner(MarketSnapshot snapshot) {
+    private Mono<TradeSignal> processSnapshotInner(MarketSnapshot snapshot, NewsUrgency urgency) {
         return Mono.fromCallable(() -> {
             IndicatorResult indicators = indicatorService.calculate(snapshot);
             TradeScore score = scoringEngine.score(snapshot.getSymbol(), indicators);
@@ -76,26 +85,20 @@ public class SignalGenerator {
             IndicatorResult indicators = (IndicatorResult) arr[0];
             TradeScore score = (TradeScore) arr[1];
 
-            // Ask AI to confirm with candle data before committing the signal
-            return aiAnalysisService.confirmWithCandles(
-                            snapshot.getSymbol(), score.getAction(), snapshot, indicators)
-                    .flatMap(confirmation -> Mono.fromCallable(() -> {
-                        boolean confirmed = isConfirmed(score.getAction(), confirmation);
-                        log.info("Candle AI confirmation for {} {}: sentiment={} confidence={} reason={} → {}",
-                                score.getAction(), snapshot.getSymbol(),
-                                confirmation.getSentimentRaw(), confirmation.getConfidence(),
-                                confirmation.getReason(),
-                                confirmed ? "APPROVED" : "REJECTED");
+            String techReject = technicalGateReject(score.getAction(), indicators);
+            if (techReject != null) {
+                log.debug("{}: technical gate rejected — {}", snapshot.getSymbol(), techReject);
+                return Mono.empty();
+            }
 
-                        if (!confirmed) return null;
-
-                        TradeSignal signal = buildSignal(snapshot, indicators, score);
-                        TradeSignal saved = signalRepository.save(signal);
-                        log.info("Generated {} signal for {} (score={}, confidence={})",
-                                score.getAction(), snapshot.getSymbol(),
-                                String.format("%.1f", score.getTotalScore()), score.getConfidence());
-                        return saved;
-                    }).subscribeOn(Schedulers.boundedElastic()));
+            return Mono.fromCallable(() -> {
+                TradeSignal signal = buildSignal(snapshot, indicators, score, urgency);
+                TradeSignal saved = signalRepository.save(signal);
+                log.info("Generated {} signal for {} (score={}, confidence={}) — passed technical gate",
+                        score.getAction(), snapshot.getSymbol(),
+                        String.format("%.1f", score.getTotalScore()), score.getConfidence());
+                return saved;
+            }).subscribeOn(Schedulers.boundedElastic());
         })
         .onErrorResume(ex -> {
             log.error("Signal generation error for {}: {}", snapshot.getSymbol(), ex.getMessage());
@@ -104,17 +107,35 @@ public class SignalGenerator {
         .filter(signal -> signal != null);
     }
 
-    private boolean isConfirmed(String action, SentimentResult confirmation) {
-        String sentiment = confirmation.getSentimentRaw();
-        if (sentiment == null) return false;
-        return switch (action) {
-            case "BUY"  -> "BULLISH".equalsIgnoreCase(sentiment);
-            case "SELL" -> "BEARISH".equalsIgnoreCase(sentiment);
-            default     -> false;
-        };
+    /**
+     * Returns a rejection reason if technical indicators do not support the action, null if all pass.
+     *
+     * BUY requires: RSI not overbought, trend not bearish, volume acceptable
+     * SELL requires: RSI not oversold, trend not bullish, volume acceptable
+     */
+    private String technicalGateReject(String action, IndicatorResult ind) {
+        String trend = ind.getTrend();
+        boolean isBuy = "BUY".equals(action);
+
+        if (isBuy) {
+            if (ind.getRsi14() > 75)
+                return "RSI overbought (" + String.format("%.1f", ind.getRsi14()) + " > 75)";
+            if ("STRONG_DOWNTREND".equals(trend) || "DOWNTREND".equals(trend))
+                return "Trend bearish (" + trend + ") for BUY";
+            if (ind.getVolumeAvg20() > 0 && ind.getCurrentVolume() < ind.getVolumeAvg20() * 0.5)
+                return "Volume too low (< 50% of average)";
+        } else {
+            if (ind.getRsi14() < 25)
+                return "RSI oversold (" + String.format("%.1f", ind.getRsi14()) + " < 25) for SELL";
+            if ("STRONG_UPTREND".equals(trend) || "UPTREND".equals(trend))
+                return "Trend bullish (" + trend + ") for SELL";
+            if (ind.getVolumeAvg20() > 0 && ind.getCurrentVolume() < ind.getVolumeAvg20() * 0.5)
+                return "Volume too low (< 50% of average)";
+        }
+        return null;
     }
 
-    private TradeSignal buildSignal(MarketSnapshot snapshot, IndicatorResult indicators, TradeScore score) {
+    private TradeSignal buildSignal(MarketSnapshot snapshot, IndicatorResult indicators, TradeScore score, NewsUrgency urgency) {
         BigDecimal entryPrice = snapshot.getCurrentPrice();
         boolean isBuy = "BUY".equals(score.getAction());
 
@@ -148,6 +169,7 @@ public class SignalGenerator {
                 .takeProfit(tp.setScale(8, RoundingMode.HALF_UP))
                 .confidence((int) score.getConfidence())
                 .status(SignalStatus.PENDING)
+                .urgency(urgency)
                 .sentimentScore(score.getSentimentScore())
                 .trendScore(score.getTrendScore())
                 .volumeScore(score.getVolumeScore())

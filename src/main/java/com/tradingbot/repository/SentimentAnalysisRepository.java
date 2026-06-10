@@ -30,4 +30,6 @@ public interface SentimentAnalysisRepository extends JpaRepository<SentimentAnal
                                                    @Param("after") LocalDateTime after);
 
     List<SentimentAnalysis> findTop50ByOrderByCreatedAtDesc();
+
+    List<SentimentAnalysis> findByNewsIdIn(java.util.Collection<Long> newsIds);
 }

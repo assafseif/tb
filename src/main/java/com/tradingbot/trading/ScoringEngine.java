@@ -1,5 +1,6 @@
 package com.tradingbot.trading;
 
+import com.tradingbot.config.NewsProperties;
 import com.tradingbot.config.ScoringProperties;
 import com.tradingbot.entity.SentimentAnalysis;
 import com.tradingbot.entity.enums.SentimentType;
@@ -18,6 +19,7 @@ import java.util.List;
 public class ScoringEngine {
 
     private final ScoringProperties scoringProperties;
+    private final NewsProperties newsProperties;
     private final SentimentAnalysisRepository sentimentRepository;
 
     public TradeScore score(String symbol, IndicatorResult indicators) {
@@ -43,8 +45,13 @@ public class ScoringEngine {
 
         total = Math.max(0, Math.min(100, total));
 
-        // Confidence: average of sentiment confidence and indicator signal strength
-        int confidence = calculateConfidence(symbol, indicators, total);
+        int aiConfidence = calculateAiSentimentConfidence(symbol);
+        int indicatorConfidence = calculateConfidence(symbol, indicators, total);
+        // Blend 1:1 — when news is available both sources contribute equally;
+        // when there is no recent news, indicator confidence carries alone.
+        int confidence = aiConfidence > 0
+                ? (aiConfidence + indicatorConfidence) / 2
+                : indicatorConfidence;
 
         String action;
         if (total >= scoringProperties.getBuyThreshold()) action = "BUY";
@@ -62,20 +69,35 @@ public class ScoringEngine {
                 .action(action)
                 .build();
 
-        log.info("Score for {} — total={}, sentiment={}, trend={}, vol={}, rsi={} => {}",
+        log.info("Score for {} — total={}, sentiment={}, trend={}, vol={}, rsi={} | aiConf={} indConf={} blendedConf={} => {}",
                 symbol,
                 String.format("%.1f", total),
                 String.format("%.1f", sentimentScore),
                 String.format("%.1f", trendScore),
                 String.format("%.1f", volumeScore),
                 String.format("%.1f", rsiScore),
+                aiConfidence, indicatorConfidence, confidence,
                 action);
 
         return score;
     }
 
+    private int calculateAiSentimentConfidence(String symbol) {
+        LocalDateTime since = LocalDateTime.now().minusMinutes(newsProperties.getMaxAgeMinutes());
+        List<SentimentAnalysis> analyses = sentimentRepository
+                .findBySymbolAndCreatedAtAfterOrderByCreatedAtDesc(symbol, since);
+
+        if (analyses.isEmpty()) return 0;
+
+        double totalConfidence = 0;
+        for (SentimentAnalysis a : analyses) {
+            totalConfidence += a.getConfidence();
+        }
+        return (int) Math.round(totalConfidence / analyses.size());
+    }
+
     private double calculateSentimentScore(String symbol) {
-        LocalDateTime since = LocalDateTime.now().minusHours(4);
+        LocalDateTime since = LocalDateTime.now().minusMinutes(newsProperties.getMaxAgeMinutes());
         List<SentimentAnalysis> analyses = sentimentRepository
                 .findBySymbolAndCreatedAtAfterOrderByCreatedAtDesc(symbol, since);
 

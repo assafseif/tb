@@ -1,0 +1,121 @@
+=============================================================
+  TRADING BOT — USEFUL COMMANDS
+=============================================================
+
+-------------------------------------------------------------
+ 1. RUN NORMALLY (no debug)
+-------------------------------------------------------------
+mvn spring-boot:run
+
+  Starts the app normally on port 8082.
+  Logs print to the terminal.
+  Use this for production or general testing.
+
+-------------------------------------------------------------
+ 2. RUN WITH DEBUG PORT OPEN (attach debugger later)
+-------------------------------------------------------------
+mvn spring-boot:run -Dspring-boot.run.jvmArguments="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+
+  Starts the app AND opens port 5005 for a debugger to attach.
+  suspend=n means the app starts immediately without waiting.
+  Then attach from code-server using F5 with the launch.json below.
+
+-------------------------------------------------------------
+ 3. RUN WITH DEBUG — WAIT FOR DEBUGGER BEFORE STARTING
+-------------------------------------------------------------
+mvn spring-boot:run -Dspring-boot.run.jvmArguments="-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005"
+
+  suspend=y means the app PAUSES at startup until you attach
+  the debugger from code-server. Useful when you want to debug
+  code that runs at boot (e.g. ApplicationRunner, @PostConstruct).
+
+-------------------------------------------------------------
+ 4. RUN WITH DEBUG LOGGING ENABLED
+-------------------------------------------------------------
+mvn spring-boot:run -Dlogging.level.com.tradingbot=DEBUG
+
+  Starts the app with DEBUG level logs for all trading bot classes.
+  You will see technical gate rejections, cache hits, skipped signals.
+  Warning: very verbose output.
+
+-------------------------------------------------------------
+ 5. RUN WITH DEBUG PORT + DEBUG LOGGING (best for debugging)
+-------------------------------------------------------------
+mvn spring-boot:run \
+  -Dspring-boot.run.jvmArguments="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005" \
+  -Dlogging.level.com.tradingbot=DEBUG
+
+  Combines commands 2 and 4.
+  Opens port 5005 for breakpoints AND shows all debug logs.
+
+-------------------------------------------------------------
+ 6. COMPILE ONLY (check for errors without running)
+-------------------------------------------------------------
+mvn compile
+
+  Just compiles the code. Fast way to check for syntax errors
+  after making changes without starting the full app.
+
+-------------------------------------------------------------
+ 7. CLEAN AND RECOMPILE EVERYTHING
+-------------------------------------------------------------
+mvn clean compile
+
+  Deletes the target/ folder and recompiles from scratch.
+  Use this when you get strange errors that don't make sense,
+  or after switching branches.
+
+-------------------------------------------------------------
+ 8. BUILD JAR (for deployment / Docker)
+-------------------------------------------------------------
+mvn clean package -DskipTests
+
+  Compiles and packages into a runnable JAR file at:
+  target/ai-news-futures-trading-bot-1.0.0.jar
+  -DskipTests skips tests so it builds faster.
+
+-------------------------------------------------------------
+ 9. RUN THE PACKAGED JAR DIRECTLY
+-------------------------------------------------------------
+java -jar target/ai-news-futures-trading-bot-1.0.0.jar
+
+  Runs the already-built JAR directly without Maven.
+  Faster startup than mvn spring-boot:run.
+
+-------------------------------------------------------------
+10. RUN JAR WITH DEBUG PORT
+-------------------------------------------------------------
+java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005 \
+     -jar target/ai-news-futures-trading-bot-1.0.0.jar
+
+  Same as command 2 but using the JAR directly.
+
+-------------------------------------------------------------
+ CODE-SERVER launch.json (attach to running debug port)
+-------------------------------------------------------------
+Create this file at: .vscode/launch.json
+
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Attach Debugger",
+      "request": "attach",
+      "hostName": "localhost",
+      "port": 5005
+    }
+  ]
+}
+
+After starting with command 2, press F5 in code-server to attach.
+Set breakpoints by clicking the red dot left of any line number.
+
+-------------------------------------------------------------
+ NOTES
+-------------------------------------------------------------
+- All mvn commands must be run from: /var/www/html/claude/trading-bot
+- The app runs on http://localhost:8082
+- Debug port is 5005 (can be changed to any free port)
+- To stop: Ctrl+C in the terminal running the app
+=============================================================

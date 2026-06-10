@@ -1,5 +1,6 @@
 package com.tradingbot.entity;
 
+import com.tradingbot.entity.enums.NewsUrgency;
 import com.tradingbot.entity.enums.SentimentType;
 import jakarta.persistence.*;
 import lombok.*;
@@ -44,6 +45,11 @@ public class SentimentAnalysis {
 
     @Column(length = 1000)
     private String reason;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    @Builder.Default
+    private NewsUrgency urgency = NewsUrgency.WITHIN_4H;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

@@ -5,8 +5,10 @@ import com.tradingbot.ai.SentimentResult;
 import com.tradingbot.config.NewsProperties;
 import com.tradingbot.entity.NewsEvent;
 import com.tradingbot.entity.SentimentAnalysis;
+import com.tradingbot.entity.enums.NewsUrgency;
 import com.tradingbot.repository.NewsEventRepository;
 import com.tradingbot.repository.SentimentAnalysisRepository;
+import com.tradingbot.trading.BreakingNewsProcessor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -26,9 +28,10 @@ public class SentimentService {
     private final NewsEventRepository newsEventRepository;
     private final SentimentAnalysisRepository sentimentRepository;
     private final NewsProperties newsProperties;
+    private final BreakingNewsProcessor breakingNewsProcessor;
 
     public Mono<Integer> analyzeUnprocessedNews() {
-        LocalDateTime cutoff = LocalDateTime.now().minusHours(newsProperties.getMaxAgeHours());
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(newsProperties.getMaxAgeMinutes());
 
         return Mono.fromCallable(() ->
                 newsEventRepository.findByProcessedFalseOrderByPublishedAtDesc()
@@ -43,8 +46,8 @@ public class SentimentService {
                 .count()
                 .map(Long::intValue)
                 .doOnSuccess(count -> {
-                    if (count > 0) log.info("Analyzed {} news items (max {}/cycle, cutoff: last {}h)",
-                            count, newsProperties.getMaxPerCycle(), newsProperties.getMaxAgeHours());
+                    if (count > 0) log.info("Analyzed {} news items (max {}/cycle, cutoff: last {}min)",
+                            count, newsProperties.getMaxPerCycle(), newsProperties.getMaxAgeMinutes());
                 });
     }
 
@@ -54,8 +57,15 @@ public class SentimentService {
                     SentimentAnalysis analysis = buildAnalysis(news, result);
                     SentimentAnalysis saved = sentimentRepository.save(analysis);
                     newsEventRepository.markAsProcessed(news.getId());
-                    log.info("Sentiment for news id={}: {} ({}) confidence={}",
-                            news.getId(), result.getSentimentRaw(), result.getSymbol(), result.getConfidence());
+                    log.info("Sentiment for news id={}: {} ({}) confidence={} urgency={}",
+                            news.getId(), result.getSentimentRaw(), result.getSymbol(),
+                            result.getConfidence(), result.getUrgencyType());
+
+                    if (result.getUrgencyType() == NewsUrgency.IMMEDIATE
+                            && !"NEUTRAL".equalsIgnoreCase(result.getSentimentRaw())
+                            && result.getConfidence() >= 70) {
+                        breakingNewsProcessor.processImmediately(result.getSymbol(), NewsUrgency.IMMEDIATE);
+                    }
                     return saved;
                 }).subscribeOn(Schedulers.boundedElastic()))
                 .onErrorResume(ex -> {
@@ -71,6 +81,7 @@ public class SentimentService {
                 .sentiment(result.getSentimentType())
                 .confidence(Math.max(0, Math.min(100, result.getConfidence())))
                 .impact(Math.max(0, Math.min(100, result.getImpact())))
+                .urgency(result.getUrgencyType())
                 .reason(result.getReason())
                 .build();
     }
